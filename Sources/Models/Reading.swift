@@ -11,23 +11,21 @@ struct Reading: Identifiable, Codable, Equatable {
     let id: UUID
     let timestamp: Date
     
-    // Sensor values (nil means invalid)
-    var bpm: Int?           // -1 in firmware → nil
-    var spo2: Int?          // -1 → nil
-    var temperature: Double? // -1.0 → nil
+    var bpm: Int?
+    var spo2: Int?
+    var temperature: Double?
     var motion: Double
     var isMoving: Bool
     var raw940: Int
     var filt940: Double
     var batteryVoltage: Double
-    var transition: String  // "none", "still_to_moving", "moving_to_still"
+    var transition: String
     var connectMs: UInt32?
     var bootCount: UInt32?
     
-    // Local management
     var sessionId: UUID?
     var synced: Bool
-    var source: String      // "ble" | "mqtt" | "manual"
+    var source: String
     
     init(
         id: UUID = UUID(),
@@ -65,35 +63,64 @@ struct Reading: Identifiable, Codable, Equatable {
         self.source = source
     }
     
-    /// Parse the exact JSON published by Armband_Full.ino
     static func fromFirmwareJSON(_ data: Data) -> Reading? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
         
         func intVal(_ key: String) -> Int? {
-            guard let v = json[key] as? Int, v != -1 else { return nil }
+            let raw: Int?
+            if let v = json[key] as? Int { raw = v }
+            else if let n = json[key] as? NSNumber { raw = n.intValue }
+            else { raw = nil }
+            guard let v = raw, v > 0 else { return nil }
             return v
         }
         
         func doubleVal(_ key: String) -> Double? {
-            if let v = json[key] as? Double, v != -1.0 { return v }
-            if let v = json[key] as? Int, v != -1 { return Double(v) }
-            return nil
+            let raw: Double?
+            if let v = json[key] as? Double { raw = v }
+            else if let v = json[key] as? Int { raw = Double(v) }
+            else if let n = json[key] as? NSNumber { raw = n.doubleValue }
+            else { raw = nil }
+            guard let v = raw, v > 0 else { return nil }
+            return v
+        }
+        
+        func boolVal(_ key: String) -> Bool {
+            if let b = json[key] as? Bool { return b }
+            if let n = json[key] as? NSNumber { return n.boolValue }
+            if let s = json[key] as? String {
+                return ["true", "1", "yes"].contains(s.lowercased())
+            }
+            return false
+        }
+        
+        func numberInt(_ key: String) -> Int {
+            if let v = json[key] as? Int { return v }
+            if let n = json[key] as? NSNumber { return n.intValue }
+            return 0
+        }
+        
+        func numberDouble(_ key: String) -> Double {
+            if let v = json[key] as? Double { return v }
+            if let v = json[key] as? Int { return Double(v) }
+            if let n = json[key] as? NSNumber { return n.doubleValue }
+            return 0
         }
         
         return Reading(
             bpm: intVal("bpm"),
             spo2: intVal("spo2"),
             temperature: doubleVal("temp"),
-            motion: (json["motion"] as? Double) ?? 0,
-            isMoving: (json["moving"] as? Bool) ?? false,
-            raw940: (json["raw940"] as? Int) ?? 0,
-            filt940: (json["filt940"] as? Double) ?? 0,
-            batteryVoltage: (json["batt"] as? Double) ?? 0,
+            motion: numberDouble("motion"),
+            isMoving: boolVal("moving"),
+            raw940: numberInt("raw940"),
+            filt940: numberDouble("filt940"),
+            batteryVoltage: numberDouble("batt"),
             transition: (json["trans"] as? String) ?? "none",
-            connectMs: json["conn_ms"] as? UInt32,
-            bootCount: json["boot"] as? UInt32,
+            connectMs: (json["conn_ms"] as? NSNumber)?.uint32Value,
+            bootCount: (json["boot"] as? NSNumber)?.uint32Value,
             synced: false,
             source: "mqtt"
         )

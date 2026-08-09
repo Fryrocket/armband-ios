@@ -3,6 +3,7 @@
 //  ArmbandIOS
 //
 //  Main live view with metrics cards + Swift Charts.
+//  BPM and 940 nm use separate charts / independent y-domains.
 //
 
 import SwiftUI
@@ -12,15 +13,13 @@ struct DashboardView: View {
     @ObservedObject var store: ReadingStore
     @ObservedObject var syncEngine: SyncEngine
     
-    private var latest: Reading? {
-        store.readings.last
-    }
+    private var latest: Reading? { store.readings.last }
+    private var recent: ArraySlice<Reading> { store.readings.suffix(60) }
     
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    // Status row
                     HStack {
                         Label(store.pendingCount > 0 ? "\(store.pendingCount) pending" : "All synced",
                               systemImage: store.pendingCount > 0 ? "icloud.and.arrow.up" : "checkmark.icloud")
@@ -37,7 +36,6 @@ struct DashboardView: View {
                     }
                     .padding(.horizontal)
                     
-                    // Metric cards
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         MetricCard(title: "Heart Rate", value: latest?.bpm.map { "\($0)" } ?? "--", unit: "bpm")
                         MetricCard(title: "SpO₂", value: latest?.spo2.map { "\($0)" } ?? "--", unit: "%")
@@ -49,36 +47,38 @@ struct DashboardView: View {
                     }
                     .padding(.horizontal)
                     
-                    // Live chart
-                    VStack(alignment: .leading) {
-                        Text("Heart Rate & 940 nm")
-                            .font(.headline)
-                            .padding(.horizontal)
-                        
+                    chartCard(title: "Heart Rate (bpm)") {
                         Chart {
-                            ForEach(store.readings.suffix(60)) { r in
+                            ForEach(Array(recent)) { r in
                                 if let bpm = r.bpm {
                                     LineMark(
                                         x: .value("Time", r.timestamp),
                                         y: .value("BPM", bpm)
                                     )
                                     .foregroundStyle(.red)
+                                    .interpolationMethod(.catmullRom)
                                 }
-                                LineMark(
-                                    x: .value("Time", r.timestamp),
-                                    y: .value("940", r.filt940 / 20)
-                                )
-                                .foregroundStyle(.blue)
                             }
                         }
-                        .frame(height: 220)
-                        .padding()
+                        .chartYScale(domain: .automatic(includesZero: false))
+                        .frame(height: 160)
                     }
-                    .background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal)
                     
-                    // Session controls
+                    chartCard(title: "940 nm (filt)") {
+                        Chart {
+                            ForEach(Array(recent)) { r in
+                                LineMark(
+                                    x: .value("Time", r.timestamp),
+                                    y: .value("940", r.filt940)
+                                )
+                                .foregroundStyle(.blue)
+                                .interpolationMethod(.catmullRom)
+                            }
+                        }
+                        .chartYScale(domain: .automatic(includesZero: false))
+                        .frame(height: 160)
+                    }
+                    
                     HStack {
                         if store.currentSessionId == nil {
                             Button("Start Session") { store.startSession() }
@@ -95,6 +95,21 @@ struct DashboardView: View {
             }
             .navigationTitle("BGM Armband")
         }
+    }
+    
+    @ViewBuilder
+    private func chartCard<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading) {
+            Text(title)
+                .font(.headline)
+                .padding(.horizontal)
+            content()
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+        }
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal)
     }
 }
 

@@ -3,8 +3,7 @@
 //  ArmbandIOS
 //
 //  Offline-first storage + sync queue.
-//  Saves are debounced and serialized so concurrent encodes cannot
-//  write a stale snapshot over a newer one.
+//  Hard cap keeps memory bounded; oldest synced rows are pruned first.
 //
 
 import Foundation
@@ -17,6 +16,7 @@ final class ReadingStore: ObservableObject {
     @Published private(set) var pendingCount: Int = 0
     @Published var currentSessionId: UUID?
     
+    private let maxReadings = 5_000
     private let fileURL: URL
     private var saveTask: Task<Void, Never>?
     private let saveDebounceNs: UInt64 = 400_000_000
@@ -34,7 +34,10 @@ final class ReadingStore: ObservableObject {
             r.sessionId = currentSessionId
         }
         readings.append(r)
-        pendingCount = readings.filter { !$0.synced }.count
+        if !r.synced {
+            pendingCount += 1
+        }
+        enforceCap()
         scheduleSave()
     }
     
@@ -43,12 +46,15 @@ final class ReadingStore: ObservableObject {
     
     func markSynced(ids: [UUID]) {
         let idSet = Set(ids)
+        var newly = 0
         for i in readings.indices {
-            if idSet.contains(readings[i].id) {
+            if idSet.contains(readings[i].id), !readings[i].synced {
                 readings[i].synced = true
+                newly += 1
             }
         }
-        pendingCount = readings.filter { !$0.synced }.count
+        pendingCount = max(0, pendingCount - newly)
+        enforceCap()
         scheduleSave()
     }
     
@@ -73,6 +79,25 @@ final class ReadingStore: ObservableObject {
                 UIApplication.shared.endBackgroundTask(bgTask)
             }
         }
+    }
+    
+    private func enforceCap() {
+        guard readings.count > maxReadings else { return }
+        var overflow = readings.count - maxReadings
+        var kept: [Reading] = []
+        kept.reserveCapacity(readings.count)
+        for r in readings {
+            if overflow > 0, r.synced {
+                overflow -= 1
+                continue
+            }
+            kept.append(r)
+        }
+        if kept.count > maxReadings {
+            kept = Array(kept.suffix(maxReadings))
+        }
+        readings = kept
+        pendingCount = readings.reduce(0) { $0 + ($1.synced ? 0 : 1) }
     }
     
     private func scheduleSave() {
@@ -105,7 +130,8 @@ final class ReadingStore: ObservableObject {
         do {
             let data = try Data(contentsOf: fileURL)
             readings = try JSONDecoder().decode([Reading].self, from: data)
-            pendingCount = readings.filter { !$0.synced }.count
+            pendingCount = readings.reduce(0) { $0 + ($1.synced ? 0 : 1) }
+            enforceCap()
         } catch {
             print("ReadingStore load error: \(error)")
         }
