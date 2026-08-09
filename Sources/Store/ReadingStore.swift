@@ -3,11 +3,13 @@
 //  ArmbandIOS
 //
 //  Offline-first storage + sync queue.
-//  Saves are debounced so rapid MQTT bursts don't stall the UI.
+//  Saves are debounced and serialized so concurrent encodes cannot
+//  write a stale snapshot over a newer one.
 //
 
 import Foundation
 import Combine
+import UIKit
 
 @MainActor
 final class ReadingStore: ObservableObject {
@@ -17,7 +19,8 @@ final class ReadingStore: ObservableObject {
     
     private let fileURL: URL
     private var saveTask: Task<Void, Never>?
-    private let saveDebounceNs: UInt64 = 400_000_000  // 400 ms
+    private let saveDebounceNs: UInt64 = 400_000_000
+    private let saveQueue = DispatchQueue(label: "com.fryrocket.armband.readings.save")
     
     init() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -35,13 +38,8 @@ final class ReadingStore: ObservableObject {
         scheduleSave()
     }
     
-    func startSession() {
-        currentSessionId = UUID()
-    }
-    
-    func stopSession() {
-        currentSessionId = nil
-    }
+    func startSession() { currentSessionId = UUID() }
+    func stopSession() { currentSessionId = nil }
     
     func markSynced(ids: [UUID]) {
         let idSet = Set(ids)
@@ -63,10 +61,18 @@ final class ReadingStore: ObservableObject {
         scheduleSave()
     }
     
-    /// Force an immediate save (e.g. on backgrounding)
     func flush() {
         saveTask?.cancel()
-        saveNow()
+        var bgTask = UIBackgroundTaskIdentifier.invalid
+        bgTask = UIApplication.shared.beginBackgroundTask {
+            UIApplication.shared.endBackgroundTask(bgTask)
+            bgTask = .invalid
+        }
+        saveNow {
+            if bgTask != .invalid {
+                UIApplication.shared.endBackgroundTask(bgTask)
+            }
+        }
     }
     
     private func scheduleSave() {
@@ -74,19 +80,22 @@ final class ReadingStore: ObservableObject {
         saveTask = Task {
             try? await Task.sleep(nanoseconds: saveDebounceNs)
             guard !Task.isCancelled else { return }
-            saveNow()
+            saveNow(completion: nil)
         }
     }
     
-    private func saveNow() {
+    private func saveNow(completion: (() -> Void)?) {
         let snapshot = readings
         let url = fileURL
-        Task.detached(priority: .utility) {
+        saveQueue.async {
             do {
                 let data = try JSONEncoder().encode(snapshot)
                 try data.write(to: url, options: .atomic)
             } catch {
                 print("ReadingStore save error: \(error)")
+            }
+            if let completion {
+                DispatchQueue.main.async { completion() }
             }
         }
     }
