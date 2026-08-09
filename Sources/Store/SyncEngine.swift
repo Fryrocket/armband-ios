@@ -3,33 +3,34 @@
 //  ArmbandIOS
 //
 //  Pushes unsynced batches to the Raspberry Pi.
-//  Only marks synced after ACK with inserted == count.
+//  Only marks synced after an ACK that accounts for every id in the batch.
 //  Fails fast on disconnect or non-ok ACK (no 15s stall).
-//  Cancellation-aware: withTaskCancellationHandler settles in-flight batches
-//  immediately so isSyncing cannot stick true for up to 15 s.
+//  Cancellation-aware end to end.
 //
-//  Fixes in this pass:
-//   - ACK timeout task no longer fires after cancellation (try? swallowed the
-//     CancellationError and ran the timeout body anyway, clobbering lastError
-//     with "No ACK ... within 15s" after every *successful* batch).
-//   - finishBatch is idempotent: a stale or duplicate resolution for a batch
-//     that is already settled is ignored instead of overwriting lastError.
-//   - device_id is stable per install (was a fresh UUID on every batch).
-//   - dumpToPi cannot spin forever if markSynced ever fails to shrink the
-//     unsynced set.
-//   - Success path goes through finishBatch (single settlement path).
-//   - dumpToPi is cancellation-aware via withTaskCancellationHandler +
-//     Task.isCancelled at the top of the loop; defer guarantees isSyncing
-//     is cleared on every exit path.
-//   - failAllPending(reason: nil) settles without writing a red error
-//     (user-initiated cancel).
+//  Fixes in this pass (on top of 407a071):
+//  - #1 Partial-insert poison batch. `inserted == count` was the success
+//       test, but the Pi uses INSERT OR IGNORE, so a batch that partially
+//       landed reports FEWER inserts on every re-send and can never settle.
+//       The ACK now carries `duplicates` (rows already present) and success
+//       is `inserted + duplicates >= count`. A head id that comes back
+//       partial twice raises a distinct "wedged" error instead of silently
+//       retrying forever.
+//  - #2 Cancel window before registration. withTaskCancellationHandler fires
+//       onCancel exactly once, at the instant of cancellation. A cancel that
+//       landed after the handler was installed but before pendingAcks was
+//       written found nothing to settle, and the batch then registered and
+//       stalled for the full 15s. Now checked before and after registration.
+//  - #3 Cancel after a successful batch no longer discards the sync stamp.
+//       totalSynced is credited before the cancellation break.
+//  - #4 (MQTTClient) onDisconnect now carries a reason; nil means we asked
+//       for the disconnect, so pending batches settle without painting red.
 //
-
 import Foundation
 import Combine
 
 @MainActor
 final class SyncEngine: ObservableObject {
+
     @Published var lastSyncTime: Date?
     @Published var isSyncing = false
     @Published var lastError: String?
@@ -37,6 +38,7 @@ final class SyncEngine: ObservableObject {
 
     private let store: ReadingStore
     private let mqtt: MQTTClient?
+
     private let batchTopic = "armband/ios/batch"
     private let batchLimit = 300
     private let ackTimeoutNs: UInt64 = 15_000_000_000
@@ -44,6 +46,11 @@ final class SyncEngine: ObservableObject {
     private var pendingAcks: [String: [UUID]] = [:]
     private var ackWaiters: [String: CheckedContinuation<Bool, Never>] = [:]
     private var ackTimeoutTasks: [String: Task<Void, Never>] = [:]
+
+    /// Poison-batch detection (fix #1). Survives across dumps on purpose:
+    /// the wedge only becomes visible on the second attempt at the same head.
+    private var lastPartialHeadId: UUID?
+    private var partialRepeatCount = 0
 
     private static let isoFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
@@ -55,14 +62,21 @@ final class SyncEngine: ObservableObject {
         self.store = store
         self.mqtt = mqtt
 
-        mqtt?.onBatchAck = { [weak self] batchId, inserted, errorMessage in
+        mqtt?.onBatchAck = { [weak self] batchId, inserted, duplicates, errorMessage in
             Task { @MainActor in
-                self?.handleAck(batchId: batchId, inserted: inserted, errorMessage: errorMessage)
+                self?.handleAck(
+                    batchId: batchId,
+                    inserted: inserted,
+                    duplicates: duplicates,
+                    errorMessage: errorMessage
+                )
             }
         }
-        mqtt?.onDisconnect = { [weak self] in
+
+        // reason == nil -> we initiated the disconnect, settle silently.
+        mqtt?.onDisconnect = { [weak self] reason in
             Task { @MainActor in
-                self?.failAllPending(reason: "MQTT disconnected - data kept pending")
+                self?.failAllPending(reason: reason)
             }
         }
     }
@@ -73,9 +87,8 @@ final class SyncEngine: ObservableObject {
         guard !isSyncing else { return }
         isSyncing = true
         lastError = nil
-        // Guarantees isSyncing is cleared on every exit path (early return,
-        // cancel, or normal completion). Without this a cancel that races
-        // with an early return can leave the flag stuck true.
+
+        // Guarantees isSyncing is cleared on every exit path.
         defer { isSyncing = false }
 
         guard let mqtt, mqtt.isConnected else {
@@ -84,14 +97,12 @@ final class SyncEngine: ObservableObject {
         }
 
         var totalSynced = 0
+
         // Guard against an unsynced set that never shrinks (markSynced no-op,
-        // store write failure, ...). Without this the loop spins at 20 Hz forever.
+        // store write failure, ...). Without this the loop spins at 20 Hz.
         var previousHeadId: UUID?
 
         while true {
-            // Check at the top of the loop so a cancel that arrives between
-            // batches (or between unsyncedBatch and sendOneBatch) exits
-            // immediately instead of starting another full batch.
             if Task.isCancelled {
                 failAllPending(reason: nil)   // settle without writing a red error
                 break
@@ -107,9 +118,8 @@ final class SyncEngine: ObservableObject {
             previousHeadId = batch.first?.id
 
             // Make the suspension point inside sendOneBatch cancellation-aware.
-            // If the parent task is cancelled while we are waiting on the
-            // CheckedContinuation, onCancel fires and we settle every pending
-            // batch immediately instead of waiting up to 15 s for the timeout.
+            // onCancel fires once, at the moment of cancellation - sendOneBatch
+            // re-checks Task.isCancelled itself to cover the registration window.
             let ok = await withTaskCancellationHandler {
                 await sendOneBatch(batch, mqtt: mqtt)
             } onCancel: { [weak self] in
@@ -117,9 +127,15 @@ final class SyncEngine: ObservableObject {
                     self?.failAllPending(reason: nil)
                 }
             }
+
+            // FIX #3: credit the batch before the cancellation break. These
+            // readings are already marked synced in the store; dropping them
+            // from totalSynced meant a cancel right after the first ACK left
+            // lastSyncTime / lastBatchCount stale even though data had landed.
+            if ok { totalSynced += batch.count }
+
             if !ok || Task.isCancelled { break }
 
-            totalSynced += batch.count
             try? await Task.sleep(nanoseconds: 50_000_000)
         }
 
@@ -175,15 +191,30 @@ final class SyncEngine: ObservableObject {
             return false
         }
 
+        // FIX #2 (part 1): cancellation may have landed while we were building
+        // the payload, i.e. after the enclosing withTaskCancellationHandler
+        // installed onCancel but before this batch exists in pendingAcks.
+        // onCancel has already run and found nothing to settle, so bail out
+        // here rather than registering a batch nothing can cancel.
+        if Task.isCancelled { return false }
+
         pendingAcks[batchId] = ids
 
         let ok = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
             self.ackWaiters[batchId] = cont
 
+            // FIX #2 (part 2): now that the batch is registered, re-check.
+            // This closes the gap between the guard above and this line -
+            // if a cancel slipped through, settle it ourselves instead of
+            // publishing and waiting the full 15s for a timeout.
+            if Task.isCancelled {
+                self.finishBatch(batchId: batchId, success: false, error: nil)
+                return
+            }
+
             self.ackTimeoutTasks[batchId] = Task { [weak self] in
                 // Do NOT use `try?` here: it swallows the CancellationError and
-                // lets the timeout body run immediately after cancelTimeout(),
-                // which then overwrites lastError on the success path.
+                // lets the timeout body run immediately after cancelTimeout().
                 do {
                     try await Task.sleep(nanoseconds: self?.ackTimeoutNs ?? 15_000_000_000)
                 } catch {
@@ -209,12 +240,17 @@ final class SyncEngine: ObservableObject {
                 )
             }
         }
+
         return ok
     }
 
     // MARK: - ACK handling
 
-    private func handleAck(batchId: String, inserted: Int, errorMessage: String?) {
+    /// - Parameters:
+    ///   - inserted:   rows the Pi actually wrote
+    ///   - duplicates: rows the Pi already had and ignored (0 if the Pi does
+    ///                 not send the field, which preserves the old behaviour)
+    private func handleAck(batchId: String, inserted: Int, duplicates: Int, errorMessage: String?) {
         // Ignore ACKs for batches we are no longer waiting on (late ACK after a
         // timeout, duplicate ACK, ACK for a previous app run).
         guard isPending(batchId) else { return }
@@ -226,23 +262,62 @@ final class SyncEngine: ObservableObject {
 
         guard let ids = pendingAcks[batchId] else { return }
 
-        guard inserted == ids.count else {
-            finishBatch(
-                batchId: batchId,
-                success: false,
-                error: "Partial insert: \(inserted)/\(ids.count) - kept pending"
-            )
+        // FIX #1: a row the Pi already holds is accounted for, not lost. With
+        // INSERT OR IGNORE, `inserted` alone shrinks on every re-send of a
+        // batch that partially landed, so the old `inserted == ids.count` test
+        // could never be satisfied again and sync wedged permanently.
+        let accounted = inserted + duplicates
+        guard accounted >= ids.count else {
+            noteFailedInsert(head: ids.first)
+            let detail = duplicates > 0
+                ? "\(inserted) new + \(duplicates) dup / \(ids.count)"
+                : "\(inserted)/\(ids.count)"
+
+            if partialRepeatCount >= 2 {
+                // Same head id, second time round: the readings are almost
+                // certainly on the Pi already and are being re-ignored.
+                finishBatch(
+                    batchId: batchId,
+                    success: false,
+                    error: """
+                    Sync wedged: same batch partially inserted \(partialRepeatCount)x (\(detail)). \
+                    The Pi is not reporting ignored duplicates - add `duplicates` to the ACK.
+                    """
+                )
+            } else {
+                finishBatch(
+                    batchId: batchId,
+                    success: false,
+                    error: "Partial insert: \(detail) - kept pending"
+                )
+            }
             return
         }
 
-        // Success — single settlement path
-        print("[SyncEngine] ACK batch \(batchId.prefix(8))... inserted=\(inserted)")
+        // Success - single settlement path
+        clearPartialTracking()
+        print("[SyncEngine] ACK batch \(batchId.prefix(8))... inserted=\(inserted) dup=\(duplicates)")
         finishBatch(batchId: batchId, success: true, error: nil, markSyncedIds: ids)
     }
 
+    private func noteFailedInsert(head: UUID?) {
+        if let head, head == lastPartialHeadId {
+            partialRepeatCount += 1
+        } else {
+            lastPartialHeadId = head
+            partialRepeatCount = 1
+        }
+    }
+
+    private func clearPartialTracking() {
+        lastPartialHeadId = nil
+        partialRepeatCount = 0
+    }
+
     /// Fail every in-flight batch.
-    /// - reason == nil  → settle silently (user cancel); lastError is left alone.
-    /// - reason != nil  → write the error string (disconnect / forced teardown).
+    /// - reason == nil -> settle silently (user cancel, or a disconnect we
+    ///   initiated ourselves); lastError is left alone.
+    /// - reason != nil -> write the error string (unexpected connection loss).
     private func failAllPending(reason: String?) {
         let ids = Array(pendingAcks.keys)
         for batchId in ids {
@@ -257,8 +332,7 @@ final class SyncEngine: ObservableObject {
     /// Idempotent single settlement path for both success and failure.
     /// A batch that has already been settled is left alone, so a stale timeout
     /// or a duplicate error ACK cannot overwrite lastError or double-resume a
-    /// continuation. On success, markSynced is applied here so there is only
-    /// one place that mutates pending state + store + waiter.
+    /// continuation.
     ///
     /// When error is nil and success is false (user cancel), lastError is
     /// deliberately left untouched so a clean cancel does not paint the UI red.
@@ -275,14 +349,11 @@ final class SyncEngine: ObservableObject {
 
         if success, let ids = markSyncedIds {
             store.markSynced(ids: ids)
-            // Clear only on an actual successful settlement. dumpToPi already
-            // zeros lastError at start; this keeps the UI clean across a
-            // multi-batch dump without resurrecting a prior-run error.
             lastError = nil
         } else if let error {
             lastError = error
         }
-        // else: success == false && error == nil → silent settle (user cancel)
+        // else: success == false && error == nil -> silent settle
 
         if let waiter = ackWaiters.removeValue(forKey: batchId) {
             waiter.resume(returning: success)

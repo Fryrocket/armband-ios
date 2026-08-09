@@ -3,22 +3,19 @@
 //  ArmbandIOS
 //
 //  CocoaMQTT wrapper: retained delegate, single-flight connect +
-//  connect timeout, batch ACK (ok and error), disconnect fails pending.
+//  connect timeout, batch ACK (ok and error), disconnect settles pending.
 //
-//  Fixes in this pass:
-//   - onDisconnect fires exactly once per connection loss. A manual disconnect()
-//     used to fire it, then CocoaMQTT's didDisconnectWithError fired it again.
-//   - lastMessage is no longer published for the PPG stream, which was one
-//     @Published mutation (and one SwiftUI invalidation) per reading.
-//   - connect timeout task returns on cancellation instead of relying solely on
-//     the isConnecting guard.
-//   - the delegate proxy is cleared alongside the old client on reconnect.
-//   - Delegate callbacks hoist the weak owner outside Task { @MainActor in ... }
-//     so Swift 6 does not treat the non-Sendable proxy as captured.
-//   - clientID is stable per install (derived from DeviceIdentity) instead of
-//     a fresh UUID on every MQTTClient init.
+//  Fixes in this pass (on top of 407a071):
+//  - #1 The batch ACK now forwards `duplicates` (rows the Pi already had and
+//       ignored) alongside `inserted`, so SyncEngine can tell "this row is
+//       already on the Pi" apart from "this row was lost". `ignored` is
+//       accepted as an alias. Missing field -> 0, i.e. old behaviour.
+//  - #4 onDisconnect carries a reason. nil means we asked for the disconnect
+//       (disconnect() / updateBroker()), so SyncEngine settles pending
+//       batches silently. lastError is likewise only written for the first
+//       report of a connection loss, so CocoaMQTT's didDisconnectWithError
+//       following a manual disconnect() no longer paints the UI red.
 //
-
 import Foundation
 import Combine
 #if canImport(CocoaMQTT)
@@ -27,6 +24,7 @@ import CocoaMQTT
 
 @MainActor
 final class MQTTClient: ObservableObject {
+
     @Published var isConnected = false
     @Published var lastError: String?
     @Published var lastMessage: String?
@@ -41,7 +39,8 @@ final class MQTTClient: ObservableObject {
     private var connectTimeoutTask: Task<Void, Never>?
 
     /// True when a disconnect has already been reported for the current
-    /// connection, so onDisconnect cannot fire twice for one loss.
+    /// connection, so onDisconnect cannot fire twice for one loss and a
+    /// follow-up error cannot overwrite lastError after a manual disconnect.
     private var disconnectSignalled = true
 
     private(set) var host: String
@@ -51,17 +50,20 @@ final class MQTTClient: ObservableObject {
     private(set) var password: String?
 
     var onReading: ((Reading) -> Void)?
-    /// batchId, inserted count, errorMessage (nil = success)
-    var onBatchAck: ((String, Int, String?) -> Void)?
-    /// Fired on disconnect so SyncEngine can fail waiting ACKs immediately
-    var onDisconnect: (() -> Void)?
+
+    /// batchId, inserted count, duplicate (already-present) count,
+    /// errorMessage (nil = success)
+    var onBatchAck: ((String, Int, Int, String?) -> Void)?
+
+    /// Fired at most once per connection so SyncEngine can settle waiting ACKs
+    /// immediately. The String? is the reason to surface:
+    ///   nil  -> we initiated this disconnect; settle silently.
+    ///   text -> unexpected loss; show it.
+    var onDisconnect: ((String?) -> Void)?
 
     init(
         host: String = "192.168.1.100",
         port: UInt16 = 1883,
-        // Stable per-install ID (same source as the batch device_id).
-        // Falls back to a short UUID only if DeviceIdentity is unavailable
-        // at construction time (should not happen in normal use).
         clientID: String? = nil,
         username: String? = nil,
         password: String? = nil
@@ -88,7 +90,7 @@ final class MQTTClient: ObservableObject {
         self.username = username
         self.password = password
         if changed {
-            disconnect()
+            disconnect()   // signals with reason nil - settles silently
             connect()
         }
     }
@@ -117,7 +119,6 @@ final class MQTTClient: ObservableObject {
         let proxy = MQTTDelegateProxy(owner: self)
         self.delegateProxy = proxy
         mqtt.delegate = proxy
-
         mqtt.connect()
         self.client = mqtt
 
@@ -148,16 +149,18 @@ final class MQTTClient: ObservableObject {
         #endif
         isConnected = false
         isConnecting = false
-        signalDisconnect()
+        // We asked for this: no reason string, so pending batches settle
+        // silently and the UI stays clean.
+        signalDisconnect(reason: nil)
     }
 
     /// Fires onDisconnect at most once per established connection. CocoaMQTT
     /// will also deliver didDisconnectWithError after a manual disconnect();
     /// without this guard SyncEngine.failAllPending ran twice.
-    private func signalDisconnect() {
+    private func signalDisconnect(reason: String?) {
         guard !disconnectSignalled else { return }
         disconnectSignalled = true
-        onDisconnect?()
+        onDisconnect?(reason)
     }
 
     /// Returns false if not connected (caller should fail fast, not wait for ACK timeout)
@@ -181,8 +184,7 @@ final class MQTTClient: ObservableObject {
         // hasSuffix covers both "armband/ppg" and any future ".../ppg"
         if topic.hasSuffix("/ppg") {
             // Hot path: one message per reading. Only touch @Published state
-            // when explicitly debugging, otherwise every reading invalidates
-            // every view observing this object.
+            // when explicitly debugging.
             if publishesEveryMessage {
                 lastMessage = String(data: data, encoding: .utf8)
             }
@@ -200,13 +202,20 @@ final class MQTTClient: ObservableObject {
 
             let status = (json["status"] as? String) ?? "ok"
             let inserted = (json["inserted"] as? Int) ?? 0
+            // FIX #1: rows the Pi already held. Absent field -> 0, which is
+            // exactly the pre-fix behaviour, so an un-updated Pi still works
+            // (it just cannot clear a partially-inserted batch).
+            let duplicates = (json["duplicates"] as? Int)
+                ?? (json["ignored"] as? Int)
+                ?? 0
+
             if status == "ok" {
-                onBatchAck?(batchId, inserted, nil)
+                onBatchAck?(batchId, inserted, duplicates, nil)
             } else {
                 let reason = (json["error"] as? String)
                     ?? (json["message"] as? String)
                     ?? status
-                onBatchAck?(batchId, inserted, reason)
+                onBatchAck?(batchId, inserted, duplicates, reason)
             }
         }
     }
@@ -218,7 +227,6 @@ final class MQTTClient: ObservableObject {
         isConnecting = false
         lastError = nil
         disconnectSignalled = false   // arm the one-shot disconnect notification
-
         #if canImport(CocoaMQTT)
         guard let mqtt = client as? CocoaMQTT else { return }
         mqtt.subscribe("armband/ppg", qos: .qos1)
@@ -229,8 +237,20 @@ final class MQTTClient: ObservableObject {
     fileprivate func handleDisconnect(error: Error?) {
         isConnected = false
         isConnecting = false
-        if let error { lastError = error.localizedDescription }
-        signalDisconnect()
+
+        // FIX #4: only surface the error on the FIRST report for this
+        // connection. After a manual disconnect() the guard is already set,
+        // and CocoaMQTT's follow-up didDisconnectWithError would otherwise
+        // put a red error on screen for a disconnect the user asked for.
+        let reason: String?
+        if let error, !disconnectSignalled {
+            lastError = error.localizedDescription
+            reason = error.localizedDescription
+        } else {
+            reason = disconnectSignalled ? nil : "MQTT disconnected - data kept pending"
+        }
+
+        signalDisconnect(reason: reason)
     }
 }
 
@@ -241,21 +261,23 @@ private final class MQTTDelegateProxy: CocoaMQTTDelegate {
 
     // Hoist the weak owner outside the Task so we do not capture the
     // non-Sendable proxy (self) into a @MainActor-isolated closure.
-    // MQTTClient is @MainActor and therefore Sendable.
     func mqtt(_ mqtt: CocoaMQTT, didConnectAck ack: CocoaMQTTConnAck) {
         let owner = self.owner
         Task { @MainActor in owner?.handleConnect() }
     }
+
     func mqtt(_ mqtt: CocoaMQTT, didReceiveMessage message: CocoaMQTTMessage, id: UInt16) {
         let owner = self.owner
         let topic = message.topic
         let data = Data(message.payload)
         Task { @MainActor in owner?.handleMessage(topic: topic, data: data) }
     }
+
     func mqtt(_ mqtt: CocoaMQTT, didDisconnectWithError err: Error?) {
         let owner = self.owner
         Task { @MainActor in owner?.handleDisconnect(error: err) }
     }
+
     func mqtt(_ mqtt: CocoaMQTT, didStateChangeTo state: CocoaMQTTConnState) {}
     func mqtt(_ mqtt: CocoaMQTT, didPublishMessage message: CocoaMQTTMessage, id: UInt16) {}
     func mqtt(_ mqtt: CocoaMQTT, didPublishAck id: UInt16) {}
