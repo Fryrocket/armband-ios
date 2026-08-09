@@ -13,18 +13,14 @@ struct ArmbandIOSApp: App {
     @Environment(\.scenePhase) private var scenePhase
     
     init() {
-        // Read Pi settings from UserDefaults so they are not hardcoded.
         let defaults = UserDefaults.standard
         let host = defaults.string(forKey: "mqtt_host") ?? "192.168.1.100"
-        let user = defaults.string(forKey: "mqtt_username")  // nil = anonymous
+        // TODO: move credentials to Keychain (UserDefaults is plaintext in container)
+        let user = defaults.string(forKey: "mqtt_username")
         let pass = defaults.string(forKey: "mqtt_password")
         
         let store = ReadingStore()
-        let mqtt = MQTTClient(
-            host: host,
-            username: user,
-            password: pass
-        )
+        let mqtt = MQTTClient(host: host, username: user, password: pass)
         _store = StateObject(wrappedValue: store)
         _mqtt = StateObject(wrappedValue: mqtt)
         _syncEngine = StateObject(wrappedValue: SyncEngine(store: store, mqtt: mqtt))
