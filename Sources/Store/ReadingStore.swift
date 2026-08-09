@@ -3,6 +3,7 @@
 //  ArmbandIOS
 //
 //  Offline-first storage + sync queue.
+//  Saves are debounced so rapid MQTT bursts don't stall the UI.
 //
 
 import Foundation
@@ -15,6 +16,8 @@ final class ReadingStore: ObservableObject {
     @Published var currentSessionId: UUID?
     
     private let fileURL: URL
+    private var saveTask: Task<Void, Never>?
+    private let saveDebounceNs: UInt64 = 400_000_000  // 400 ms
     
     init() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -29,7 +32,7 @@ final class ReadingStore: ObservableObject {
         }
         readings.append(r)
         pendingCount = readings.filter { !$0.synced }.count
-        save()
+        scheduleSave()
     }
     
     func startSession() {
@@ -41,13 +44,14 @@ final class ReadingStore: ObservableObject {
     }
     
     func markSynced(ids: [UUID]) {
+        let idSet = Set(ids)
         for i in readings.indices {
-            if ids.contains(readings[i].id) {
+            if idSet.contains(readings[i].id) {
                 readings[i].synced = true
             }
         }
         pendingCount = readings.filter { !$0.synced }.count
-        save()
+        scheduleSave()
     }
     
     func unsyncedBatch(limit: Int = 200) -> [Reading] {
@@ -56,15 +60,34 @@ final class ReadingStore: ObservableObject {
     
     func clearSynced() {
         readings.removeAll { $0.synced }
-        save()
+        scheduleSave()
     }
     
-    private func save() {
-        do {
-            let data = try JSONEncoder().encode(readings)
-            try data.write(to: fileURL, options: .atomic)
-        } catch {
-            print("ReadingStore save error: \(error)")
+    /// Force an immediate save (e.g. on backgrounding)
+    func flush() {
+        saveTask?.cancel()
+        saveNow()
+    }
+    
+    private func scheduleSave() {
+        saveTask?.cancel()
+        saveTask = Task {
+            try? await Task.sleep(nanoseconds: saveDebounceNs)
+            guard !Task.isCancelled else { return }
+            saveNow()
+        }
+    }
+    
+    private func saveNow() {
+        let snapshot = readings
+        let url = fileURL
+        Task.detached(priority: .utility) {
+            do {
+                let data = try JSONEncoder().encode(snapshot)
+                try data.write(to: url, options: .atomic)
+            } catch {
+                print("ReadingStore save error: \(error)")
+            }
         }
     }
     
