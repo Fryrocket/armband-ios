@@ -15,6 +15,8 @@
 //   - the delegate proxy is cleared alongside the old client on reconnect.
 //   - Delegate callbacks hoist the weak owner outside Task { @MainActor in ... }
 //     so Swift 6 does not treat the non-Sendable proxy as captured.
+//   - clientID is stable per install (derived from DeviceIdentity) instead of
+//     a fresh UUID on every MQTTClient init.
 //
 
 import Foundation
@@ -57,13 +59,23 @@ final class MQTTClient: ObservableObject {
     init(
         host: String = "192.168.1.100",
         port: UInt16 = 1883,
-        clientID: String = "ios-armband-\(UUID().uuidString.prefix(8))",
+        // Stable per-install ID (same source as the batch device_id).
+        // Falls back to a short UUID only if DeviceIdentity is unavailable
+        // at construction time (should not happen in normal use).
+        clientID: String? = nil,
         username: String? = nil,
         password: String? = nil
     ) {
         self.host = host
         self.port = port
-        self.clientID = clientID
+        if let clientID, !clientID.isEmpty {
+            self.clientID = clientID
+        } else {
+            // Prefer the stable device identity so the broker sees the same
+            // client across process launches. Prefix keeps it readable in logs.
+            let stable = DeviceIdentity.current
+            self.clientID = "ios-armband-\(stable.prefix(8))"
+        }
         self.username = username
         self.password = password
     }

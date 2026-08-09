@@ -5,6 +5,8 @@
 //  Pushes unsynced batches to the Raspberry Pi.
 //  Only marks synced after ACK with inserted == count.
 //  Fails fast on disconnect or non-ok ACK (no 15s stall).
+//  Cancellation-aware: withTaskCancellationHandler settles in-flight batches
+//  immediately so isSyncing cannot stick true for up to 15 s.
 //
 //  Fixes in this pass:
 //   - ACK timeout task no longer fires after cancellation (try? swallowed the
@@ -15,8 +17,12 @@
 //   - device_id is stable per install (was a fresh UUID on every batch).
 //   - dumpToPi cannot spin forever if markSynced ever fails to shrink the
 //     unsynced set.
-//   - Success path goes through finishBatch (single settlement path) so
-//     cancel / remove / resume / markSynced stay in one place.
+//   - Success path goes through finishBatch (single settlement path).
+//   - dumpToPi is cancellation-aware via withTaskCancellationHandler +
+//     Task.isCancelled at the top of the loop; defer guarantees isSyncing
+//     is cleared on every exit path.
+//   - failAllPending(reason: nil) settles without writing a red error
+//     (user-initiated cancel).
 //
 
 import Foundation
@@ -67,10 +73,13 @@ final class SyncEngine: ObservableObject {
         guard !isSyncing else { return }
         isSyncing = true
         lastError = nil
+        // Guarantees isSyncing is cleared on every exit path (early return,
+        // cancel, or normal completion). Without this a cancel that races
+        // with an early return can leave the flag stuck true.
+        defer { isSyncing = false }
 
         guard let mqtt, mqtt.isConnected else {
             lastError = "Pi not reachable (MQTT disconnected)"
-            isSyncing = false
             return
         }
 
@@ -80,6 +89,14 @@ final class SyncEngine: ObservableObject {
         var previousHeadId: UUID?
 
         while true {
+            // Check at the top of the loop so a cancel that arrives between
+            // batches (or between unsyncedBatch and sendOneBatch) exits
+            // immediately instead of starting another full batch.
+            if Task.isCancelled {
+                failAllPending(reason: nil)   // settle without writing a red error
+                break
+            }
+
             let batch = store.unsyncedBatch(limit: batchLimit)
             guard !batch.isEmpty else { break }
 
@@ -89,8 +106,18 @@ final class SyncEngine: ObservableObject {
             }
             previousHeadId = batch.first?.id
 
-            let ok = await sendOneBatch(batch, mqtt: mqtt)
-            if !ok { break }
+            // Make the suspension point inside sendOneBatch cancellation-aware.
+            // If the parent task is cancelled while we are waiting on the
+            // CheckedContinuation, onCancel fires and we settle every pending
+            // batch immediately instead of waiting up to 15 s for the timeout.
+            let ok = await withTaskCancellationHandler {
+                await sendOneBatch(batch, mqtt: mqtt)
+            } onCancel: { [weak self] in
+                Task { @MainActor in
+                    self?.failAllPending(reason: nil)
+                }
+            }
+            if !ok || Task.isCancelled { break }
 
             totalSynced += batch.count
             try? await Task.sleep(nanoseconds: 50_000_000)
@@ -100,7 +127,6 @@ final class SyncEngine: ObservableObject {
             lastBatchCount = totalSynced
             lastSyncTime = Date()
         }
-        isSyncing = false
     }
 
     // MARK: - One batch
@@ -214,8 +240,10 @@ final class SyncEngine: ObservableObject {
         finishBatch(batchId: batchId, success: true, error: nil, markSyncedIds: ids)
     }
 
-    /// Fail every in-flight batch (disconnect or forced teardown)
-    private func failAllPending(reason: String) {
+    /// Fail every in-flight batch.
+    /// - reason == nil  → settle silently (user cancel); lastError is left alone.
+    /// - reason != nil  → write the error string (disconnect / forced teardown).
+    private func failAllPending(reason: String?) {
         let ids = Array(pendingAcks.keys)
         for batchId in ids {
             finishBatch(batchId: batchId, success: false, error: reason)
@@ -231,6 +259,9 @@ final class SyncEngine: ObservableObject {
     /// or a duplicate error ACK cannot overwrite lastError or double-resume a
     /// continuation. On success, markSynced is applied here so there is only
     /// one place that mutates pending state + store + waiter.
+    ///
+    /// When error is nil and success is false (user cancel), lastError is
+    /// deliberately left untouched so a clean cancel does not paint the UI red.
     private func finishBatch(
         batchId: String,
         success: Bool,
@@ -251,6 +282,7 @@ final class SyncEngine: ObservableObject {
         } else if let error {
             lastError = error
         }
+        // else: success == false && error == nil → silent settle (user cancel)
 
         if let waiter = ackWaiters.removeValue(forKey: batchId) {
             waiter.resume(returning: success)
