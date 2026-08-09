@@ -3,8 +3,8 @@
 //  ArmbandIOS
 //
 //  Pushes unsynced batches to the Raspberry Pi.
-//  Only marks records synced after Pi ACK with inserted == count.
-//  Includes reading IDs for Pi-side idempotency (INSERT OR IGNORE).
+//  Only marks synced after ACK with inserted == count.
+//  Fails fast on disconnect or non-ok ACK (no 15s stall).
 //
 
 import Foundation
@@ -37,9 +37,14 @@ final class SyncEngine: ObservableObject {
         self.store = store
         self.mqtt = mqtt
         
-        mqtt?.onBatchAck = { [weak self] batchId, inserted in
+        mqtt?.onBatchAck = { [weak self] batchId, inserted, errorMessage in
             Task { @MainActor in
-                self?.handleAck(batchId: batchId, inserted: inserted)
+                self?.handleAck(batchId: batchId, inserted: inserted, errorMessage: errorMessage)
+            }
+        }
+        mqtt?.onDisconnect = { [weak self] in
+            Task { @MainActor in
+                self?.failAllPending(reason: "MQTT disconnected – data kept pending")
             }
         }
     }
@@ -111,6 +116,11 @@ final class SyncEngine: ObservableObject {
             return false
         }
         
+        guard mqtt.isConnected else {
+            lastError = "MQTT disconnected before publish – data kept pending"
+            return false
+        }
+        
         pendingAcks[batchId] = ids
         
         let ok = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
@@ -120,36 +130,44 @@ final class SyncEngine: ObservableObject {
                 try? await Task.sleep(nanoseconds: self?.ackTimeoutNs ?? 15_000_000_000)
                 await MainActor.run {
                     guard let self else { return }
-                    if self.pendingAcks.removeValue(forKey: batchId) != nil {
-                        self.ackTimeoutTasks.removeValue(forKey: batchId)
-                        if let waiter = self.ackWaiters.removeValue(forKey: batchId) {
-                            self.lastError = "No ACK from Pi within 15s – data kept pending"
-                            waiter.resume(returning: false)
-                        }
-                    }
+                    self.finishBatch(
+                        batchId: batchId,
+                        success: false,
+                        error: "No ACK from Pi within 15s – data kept pending"
+                    )
                 }
             }
             
-            mqtt.publish(topic: self.batchTopic, payload: data)
+            let published = mqtt.publish(topic: self.batchTopic, payload: data)
+            if !published {
+                self.finishBatch(
+                    batchId: batchId,
+                    success: false,
+                    error: "Publish failed (disconnected) – data kept pending"
+                )
+            }
         }
         return ok
     }
     
-    private func handleAck(batchId: String, inserted: Int) {
-        guard let ids = pendingAcks[batchId] else { return }
-        
-        ackTimeoutTasks[batchId]?.cancel()
-        ackTimeoutTasks.removeValue(forKey: batchId)
-        
-        guard inserted == ids.count else {
-            lastError = "Partial insert: \(inserted)/\(ids.count) — kept pending"
-            pendingAcks.removeValue(forKey: batchId)
-            if let waiter = ackWaiters.removeValue(forKey: batchId) {
-                waiter.resume(returning: false)
-            }
+    private func handleAck(batchId: String, inserted: Int, errorMessage: String?) {
+        if let errorMessage {
+            finishBatch(batchId: batchId, success: false, error: "Pi error: \(errorMessage)")
             return
         }
         
+        guard let ids = pendingAcks[batchId] else { return }
+        
+        guard inserted == ids.count else {
+            finishBatch(
+                batchId: batchId,
+                success: false,
+                error: "Partial insert: \(inserted)/\(ids.count) — kept pending"
+            )
+            return
+        }
+        
+        cancelTimeout(batchId)
         pendingAcks.removeValue(forKey: batchId)
         store.markSynced(ids: ids)
         lastError = nil
@@ -158,5 +176,28 @@ final class SyncEngine: ObservableObject {
         if let waiter = ackWaiters.removeValue(forKey: batchId) {
             waiter.resume(returning: true)
         }
+    }
+    
+    private func failAllPending(reason: String) {
+        let ids = Array(pendingAcks.keys)
+        for batchId in ids {
+            finishBatch(batchId: batchId, success: false, error: reason)
+        }
+    }
+    
+    private func finishBatch(batchId: String, success: Bool, error: String?) {
+        cancelTimeout(batchId)
+        pendingAcks.removeValue(forKey: batchId)
+        if let error {
+            lastError = error
+        }
+        if let waiter = ackWaiters.removeValue(forKey: batchId) {
+            waiter.resume(returning: success)
+        }
+    }
+    
+    private func cancelTimeout(_ batchId: String) {
+        ackTimeoutTasks[batchId]?.cancel()
+        ackTimeoutTasks.removeValue(forKey: batchId)
     }
 }
