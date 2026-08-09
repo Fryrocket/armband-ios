@@ -3,6 +3,7 @@
 //  ArmbandIOS
 //
 //  Pushes unsynced batches to the Raspberry Pi.
+//  Only marks records synced after Pi publishes ACK on armband/ios/batch/ack.
 //
 
 import Foundation
@@ -19,9 +20,19 @@ final class SyncEngine: ObservableObject {
     private let mqtt: MQTTClient?
     private let batchTopic = "armband/ios/batch"
     
+    /// batch_id → reading IDs waiting for ACK
+    private var pendingAcks: [String: [UUID]] = [:]
+    private var ackTimeoutTasks: [String: Task<Void, Never>] = [:]
+    
     init(store: ReadingStore, mqtt: MQTTClient? = nil) {
         self.store = store
         self.mqtt = mqtt
+        
+        mqtt?.onBatchAck = { [weak self] batchId, inserted in
+            Task { @MainActor in
+                self?.handleAck(batchId: batchId, inserted: inserted)
+            }
+        }
     }
     
     func dumpToPi() async {
@@ -35,13 +46,21 @@ final class SyncEngine: ObservableObject {
             return
         }
         
+        guard let mqtt, mqtt.isConnected else {
+            lastError = "Pi not reachable (MQTT disconnected)"
+            isSyncing = false
+            return
+        }
+        
         lastBatchCount = batch.count
+        let batchId = UUID().uuidString
+        let ids = batch.map { $0.id }
         
         let payload: [String: Any] = [
             "source": "ios",
             "device_id": UUID().uuidString,
             "session_id": store.currentSessionId?.uuidString as Any,
-            "batch_id": UUID().uuidString,
+            "batch_id": batchId,
             "count": batch.count,
             "readings": batch.map { r -> [String: Any] in
                 var dict: [String: Any] = [
@@ -62,22 +81,34 @@ final class SyncEngine: ObservableObject {
         
         do {
             let data = try JSONSerialization.data(withJSONObject: payload)
+            pendingAcks[batchId] = ids
+            mqtt.publish(topic: batchTopic, payload: data)
             
-            if let mqtt, mqtt.isConnected {
-                mqtt.publish(topic: batchTopic, payload: data)
-                try await Task.sleep(nanoseconds: 400_000_000)
-                store.markSynced(ids: batch.map { $0.id })
-                lastSyncTime = Date()
-            } else {
-                if let str = String(data: data, encoding: .utf8) {
-                    print("[SyncEngine] Pi not reachable via MQTT. Batch ready:\n\(str.prefix(400))...")
+            // Timeout: if no ACK in 15s, leave records unsynced and report error
+            ackTimeoutTasks[batchId] = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                if pendingAcks[batchId] != nil {
+                    pendingAcks.removeValue(forKey: batchId)
+                    lastError = "No ACK from Pi within 15s – data kept pending"
+                    isSyncing = false
                 }
-                lastError = "Pi not reachable (MQTT disconnected)"
             }
         } catch {
             lastError = error.localizedDescription
+            isSyncing = false
         }
+    }
+    
+    private func handleAck(batchId: String, inserted: Int) {
+        guard let ids = pendingAcks.removeValue(forKey: batchId) else { return }
+        ackTimeoutTasks[batchId]?.cancel()
+        ackTimeoutTasks.removeValue(forKey: batchId)
         
+        store.markSynced(ids: ids)
+        lastSyncTime = Date()
+        lastBatchCount = inserted
+        lastError = nil
         isSyncing = false
+        print("[SyncEngine] ACK batch \(batchId.prefix(8))… inserted=\(inserted)")
     }
 }
