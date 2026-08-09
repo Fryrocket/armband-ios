@@ -61,20 +61,25 @@ armband-ios/
 **Sources**
 - [Sources/App/ArmbandIOSApp.swift](Sources/App/ArmbandIOSApp.swift) — app entry, dependency wiring, scene-phase flush
 - [Sources/Models/Reading.swift](Sources/Models/Reading.swift) — data model + firmware JSON parser
+- [Sources/Networking/MQTTClient.swift](Sources/Networking/MQTTClient.swift) — CocoaMQTT wrapper, delegate proxy
+- [Sources/Store/DeviceIdentity.swift](Sources/Store/DeviceIdentity.swift) — stable per-install device id
 - [Sources/Store/ReadingStore.swift](Sources/Store/ReadingStore.swift) — offline store, debounced saves, pending queue
 - [Sources/Store/SyncEngine.swift](Sources/Store/SyncEngine.swift) — batch dump, ACK handling, cancellation
-- [Sources/Store/DeviceIdentity.swift](Sources/Store/DeviceIdentity.swift) — stable per-install device id
-- [Sources/Networking/MQTTClient.swift](Sources/Networking/MQTTClient.swift) — CocoaMQTT wrapper, delegate proxy
 - [Sources/Views/ContentView.swift](Sources/Views/ContentView.swift) — tab shell + settings
 - [Sources/Views/DashboardView.swift](Sources/Views/DashboardView.swift) — metric cards + Swift Charts
 
 **Docs**
-- [docs/SETUP_CHECKLIST.md](docs/SETUP_CHECKLIST.md) — start here
-- [docs/XCODE_SETUP.md](docs/XCODE_SETUP.md)
-- [docs/PROTOCOL.md](docs/PROTOCOL.md) — firmware JSON payload
-- [docs/SYNC_SPEC.md](docs/SYNC_SPEC.md) — batch + ACK contract
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/PROTOCOL.md](docs/PROTOCOL.md) — firmware JSON payload
 - [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)
+- [docs/SETUP_CHECKLIST.md](docs/SETUP_CHECKLIST.md) — start here
+- [docs/SYNC_SPEC.md](docs/SYNC_SPEC.md) — batch + ACK contract
+- [docs/XCODE_SETUP.md](docs/XCODE_SETUP.md)
+
+**Scripts**
+- [scripts/update_file_index.py](scripts/update_file_index.py)
+
+**Config**
 - [LICENSE](LICENSE)
 
 ## Connection strategy
