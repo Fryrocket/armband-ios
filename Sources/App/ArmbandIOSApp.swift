@@ -10,13 +10,20 @@ struct ArmbandIOSApp: App {
     @StateObject private var store: ReadingStore
     @StateObject private var mqtt: MQTTClient
     @StateObject private var syncEngine: SyncEngine
+    @Environment(\.scenePhase) private var scenePhase
     
     init() {
+        // Read Pi settings from UserDefaults so they are not hardcoded.
+        let defaults = UserDefaults.standard
+        let host = defaults.string(forKey: "mqtt_host") ?? "192.168.1.100"
+        let user = defaults.string(forKey: "mqtt_username")  // nil = anonymous
+        let pass = defaults.string(forKey: "mqtt_password")
+        
         let store = ReadingStore()
         let mqtt = MQTTClient(
-            host: "192.168.1.100",   // ← change to your Pi IP
-            username: "armband",
-            password: nil
+            host: host,
+            username: user,
+            password: pass
         )
         _store = StateObject(wrappedValue: store)
         _mqtt = StateObject(wrappedValue: mqtt)
@@ -30,10 +37,17 @@ struct ArmbandIOSApp: App {
                 .environmentObject(mqtt)
                 .environmentObject(syncEngine)
                 .onAppear {
-                    mqtt.onReading = { [weak store] reading in
-                        store?.add(reading)
+                    if mqtt.onReading == nil {
+                        mqtt.onReading = { [weak store] reading in
+                            store?.add(reading)
+                        }
                     }
                     mqtt.connect()
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .background || phase == .inactive {
+                        store.flush()
+                    }
                 }
         }
     }
