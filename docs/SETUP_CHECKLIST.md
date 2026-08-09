@@ -88,6 +88,59 @@ Use this list to go from zero to a running app on your iPhone.
 
 ---
 
+## I. Troubleshooting
+
+### Build / Xcode issues
+
+| Problem | What to try |
+|---------|-------------|
+| **Duplicate `ContentView` / `App` symbols** | Delete the default files Xcode created. Keep only the ones from `Sources/`. |
+| **“No such module CocoaMQTT”** | File → Packages → Reset Package Caches, then resolve again. Confirm the package is added to the **ArmbandIOS** target. |
+| **Signing errors** | Select your Team under Signing & Capabilities. Use your personal Apple ID if you don’t have a paid team. |
+| **Files not compiling** | Make sure every `.swift` file is checked under Target Membership for ArmbandIOS. |
+
+### MQTT connection issues
+
+| Problem | What to try |
+|---------|-------------|
+| **Stays Disconnected (red)** | 1. Confirm Pi IP is correct and reachable (`ping 192.168.x.x` from Mac).<br>2. Confirm Mosquitto is running on the Pi: `sudo systemctl status mosquitto`.<br>3. Check username/password match the broker config.<br>4. On first launch, iOS will ask for Local Network permission — accept it.<br>5. Simulator sometimes has flaky local network; prefer a real iPhone. |
+| **“CocoaMQTT package not added yet”** | The `#if canImport(CocoaMQTT)` stub is active. Add the package (step D) and clean build. |
+| **Connected but no readings** | 1. Confirm armband is publishing: on Pi run `mosquitto_sub -t armband/ppg -v`.<br>2. Check topic is exactly `armband/ppg`.<br>3. Look at Settings → last error / last message. |
+| **Permission denied / Local Network** | Delete the app from the phone, reinstall, and accept the Local Network prompt. Also verify Info.plist keys from step E. |
+
+### Data / UI issues
+
+| Problem | What to try |
+|---------|-------------|
+| **Readings appear then disappear after restart** | Offline store writes to the app’s Documents folder. If you deleted the app, data is gone. Otherwise check that `ReadingStore.save()` is not failing (Xcode console). |
+| **Pending count never drops** | MQTT must be connected for “Dump to Pi” to mark records synced. Check Settings → connection status. |
+| **Charts empty** | Need at least a few readings with valid `bpm` / `filt940`. Trigger the armband (finger on sensor or motion wake). |
+| **Dump to Pi does nothing** | Pending count must be > 0 and MQTT connected. Watch Xcode console for the batch JSON printout. |
+
+### Network / Pi side quick checks
+
+```bash
+# On the Pi
+ping -c 3 <phone-or-mac-ip>          # can the Pi see the phone network?
+sudo systemctl status mosquitto      # broker running?
+mosquitto_sub -t 'armband/#' -v      # see all armband traffic
+```
+
+```bash
+# From Mac (same network)
+ping 192.168.x.x                     # Pi reachable?
+nc -vz 192.168.x.x 1883              # MQTT port open?
+```
+
+### Still stuck?
+
+1. Clean Build Folder in Xcode (Shift⌘K) then rebuild.
+2. Check the Xcode console for MQTT / JSON parse errors.
+3. Verify the exact payload with `docs/PROTOCOL.md`.
+4. Open an issue or note the console output for next debugging session.
+
+---
+
 ## Quick reference
 
 | Item              | Value / Location                          |
