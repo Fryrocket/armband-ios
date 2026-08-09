@@ -77,6 +77,7 @@ armband-ios/
 - [docs/XCODE_SETUP.md](docs/XCODE_SETUP.md)
 
 **Scripts**
+- [scripts/generate_changelog.py](scripts/generate_changelog.py)
 - [scripts/update_file_index.py](scripts/update_file_index.py)
 
 **Config**
