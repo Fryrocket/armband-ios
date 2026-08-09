@@ -3,7 +3,7 @@
 //  ArmbandIOS
 //
 //  CocoaMQTT wrapper: retained delegate, single-flight connect +
-//  connect timeout, batch ACK subscription, live broker update.
+//  connect timeout, batch ACK (ok and error), disconnect fails pending.
 //
 
 import Foundation
@@ -31,7 +31,10 @@ final class MQTTClient: ObservableObject {
     private(set) var password: String?
     
     var onReading: ((Reading) -> Void)?
-    var onBatchAck: ((String, Int) -> Void)?
+    /// batchId, inserted count, errorMessage (nil = success)
+    var onBatchAck: ((String, Int, String?) -> Void)?
+    /// Fired on disconnect so SyncEngine can fail waiting ACKs immediately
+    var onDisconnect: (() -> Void)?
     
     init(
         host: String = "192.168.1.100",
@@ -105,33 +108,52 @@ final class MQTTClient: ObservableObject {
         #if canImport(CocoaMQTT)
         (client as? CocoaMQTT)?.disconnect()
         #endif
+        let wasConnected = isConnected || isConnecting
         isConnected = false
         isConnecting = false
+        if wasConnected {
+            onDisconnect?()
+        }
     }
     
-    func publish(topic: String, payload: Data) {
+    /// Returns false if not connected (caller should fail fast, not wait for ACK timeout)
+    @discardableResult
+    func publish(topic: String, payload: Data) -> Bool {
         #if canImport(CocoaMQTT)
-        guard let mqtt = client as? CocoaMQTT, isConnected else { return }
+        guard let mqtt = client as? CocoaMQTT, isConnected else { return false }
         if let str = String(data: payload, encoding: .utf8) {
             mqtt.publish(topic, withString: str, qos: .qos1)
+            return true
         }
+        return false
+        #else
+        return false
         #endif
     }
     
     fileprivate func handleMessage(topic: String, data: Data) {
         lastMessage = String(data: data, encoding: .utf8)
+        
         if topic == "armband/ppg" || topic.hasSuffix("/ppg") {
             if let reading = Reading.fromFirmwareJSON(data) {
                 onReading?(reading)
             }
             return
         }
+        
         if topic == "armband/ios/batch/ack" || topic.hasSuffix("/batch/ack") {
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let batchId = json["batch_id"] as? String,
-                  (json["status"] as? String) == "ok" else { return }
+                  let batchId = json["batch_id"] as? String else { return }
+            let status = (json["status"] as? String) ?? "ok"
             let inserted = (json["inserted"] as? Int) ?? 0
-            onBatchAck?(batchId, inserted)
+            if status == "ok" {
+                onBatchAck?(batchId, inserted, nil)
+            } else {
+                let reason = (json["error"] as? String)
+                    ?? (json["message"] as? String)
+                    ?? status
+                onBatchAck?(batchId, inserted, reason)
+            }
         }
     }
     
@@ -152,6 +174,7 @@ final class MQTTClient: ObservableObject {
         isConnected = false
         isConnecting = false
         if let error { lastError = error.localizedDescription }
+        onDisconnect?()
     }
 }
 
@@ -159,6 +182,7 @@ final class MQTTClient: ObservableObject {
 private final class MQTTDelegateProxy: CocoaMQTTDelegate {
     weak var owner: MQTTClient?
     init(owner: MQTTClient) { self.owner = owner }
+    
     func mqtt(_ mqtt: CocoaMQTT, didConnectAck ack: CocoaMQTTConnAck) {
         Task { @MainActor in owner?.handleConnect() }
     }
