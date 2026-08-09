@@ -12,6 +12,11 @@
 //  Fix Pack 3:
 //  - cleanSession = false now that clientID is stable via DeviceIdentity.
 //
+//  Fix Pack 3.1:
+//  - Subscribe armband/ppg at QoS 0. Persistent session + QoS 1 queued offline
+//    readings and the phone stamped them at receipt (firmware has no RTC).
+//    Batch ACK stays at QoS 1 so dump ACKs still survive reconnects.
+//
 import Foundation
 import Combine
 #if canImport(CocoaMQTT)
@@ -193,7 +198,10 @@ final class MQTTClient: ObservableObject {
         disconnectSignalled = false
         #if canImport(CocoaMQTT)
         guard let mqtt = client as? CocoaMQTT else { return }
-        mqtt.subscribe("armband/ppg", qos: .qos1)
+        // QoS 0 on live PPG: no offline queue → no backlog stamped at reconnect time.
+        // Firmware has no RTC; phone uses Date() on receipt. QoS 1 would lie about time.
+        mqtt.subscribe("armband/ppg", qos: .qos0)
+        // QoS 1 on batch ACK: dump settlement must survive brief reconnects.
         mqtt.subscribe("armband/ios/batch/ack", qos: .qos1)
         #endif
     }
