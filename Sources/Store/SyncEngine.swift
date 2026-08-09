@@ -7,15 +7,8 @@
 //  Fails fast on disconnect or non-ok ACK (no 15s stall).
 //  Cancellation-aware end to end.
 //
-//  Fixes in this pass (on top of 407a071):
-//  - #1 Partial-insert poison batch.
-//  - #2 Cancel window before registration.
-//  - #3 Cancel after a successful batch no longer discards the sync stamp.
-//  - #4 (MQTTClient) onDisconnect carries a reason.
-//
-//  Fix Pack 3 (2026-08-09 evening):
-//  - #5 Cancel affordance. dumpTask retained; startDump() / cancelDump().
-//  - #6 Per-reading session_id on the wire.
+//  Fix Pack 3: cancel affordance, per-reading session_id.
+//  Fix Pack 3.2: payload size guard — halve batch if serialized data > 32 KB.
 //
 import Foundation
 import Combine
@@ -33,14 +26,14 @@ final class SyncEngine: ObservableObject {
 
     private let batchTopic = "armband/ios/batch"
     private let batchLimit = 300
+    /// Soft ceiling for a single publish. If exceeded with >1 reading, halve and retry.
+    private let maxPayloadBytes = 32_768
     private let ackTimeoutNs: UInt64 = 15_000_000_000
 
     private var pendingAcks: [String: [UUID]] = [:]
     private var ackWaiters: [String: CheckedContinuation<Bool, Never>] = [:]
     private var ackTimeoutTasks: [String: Task<Void, Never>] = [:]
 
-    /// Active dump task. Retained so cancelDump() can reach the internal
-    /// cancellation machinery. Cleared when the dump finishes or is cancelled.
     private var dumpTask: Task<Void, Never>?
 
     private var lastPartialHeadId: UUID?
@@ -177,6 +170,13 @@ final class SyncEngine: ObservableObject {
         } catch {
             lastError = error.localizedDescription
             return false
+        }
+
+        // Oversized payload: publish would return true, never ACK, retry forever.
+        // Halve until it fits or a single reading remains (then fail honestly).
+        if data.count > maxPayloadBytes, batch.count > 1 {
+            let half = Array(batch.prefix(batch.count / 2))
+            return await sendOneBatch(half, mqtt: mqtt)
         }
 
         guard mqtt.isConnected else {
