@@ -6,45 +6,72 @@ Reliably move readings collected on the iPhone to the Raspberry Pi (`armband-ai`
 ## Offline queue behaviour
 
 1. Every reading received from the armband is immediately written locally with `synced = 0`.
-2. App periodically checks reachability of the Pi (MQTT broker or HTTP health endpoint).
-3. When reachable, batches of unsynced records are sent.
-4. On acknowledged success, records are marked `synced = 1` (or deleted).
+2. App periodically checks reachability of the Pi (MQTT broker).
+3. When reachable, batches of unsynced records (limit 300) are sent.
+4. On acknowledged success (every id accounted for), records are marked `synced = 1`.
 
-## Batch format (proposed JSON)
+## Batch publish (iOS → Pi)
+
+Topic: `armband/ios/batch`
 
 ```json
 {
   "source": "ios",
-  "device_id": "iphone-xxxx",
+  "device_id": "<stable DeviceIdentity>",
+  "batch_id": "<uuid>",
+  "count": 300,
   "session_id": "optional-uuid",
-  "batch_id": "uuid",
   "readings": [
     {
+      "id": "<uuid>",
       "ts": "2026-08-09T13:45:12.123Z",
-      "hr": 72,
-      "spo2": 98,
-      "temp_c": 33.4,
       "motion": 0.12,
+      "moving": false,
+      "raw940": 1842,
       "filt940": 1842.5,
-      "battery_v": 3.71,
-      "quality_flags": 0
+      "batt": 3.71,
+      "trans": "...",
+      "bpm": 72,
+      "spo2": 98,
+      "temp": 33.4
     }
   ]
 }
 ```
 
-## Transport options (priority order)
+## Batch ACK (Pi → iOS)  — Fix Pack 2
 
-1. **MQTT** – publish to `armband/ios/batch` (preferred if Pi MQTT broker is already running)
-2. **HTTP POST** – simple endpoint on Pi (e.g. `/api/v1/ios-batch`)
-3. Manual export (CSV/JSON) as fallback
+Topic: `armband/ios/batch/ack`
 
-## Conflict / duplicate handling
+```json
+{
+  "batch_id": "...",
+  "status": "ok",
+  "count": 300,
+  "inserted": 120,
+  "duplicates": 180
+}
+```
 
-- Use unique `batch_id` + original timestamp
-- Pi side should be idempotent (ignore already-seen timestamps from same source)
+- `inserted` = rows the Pi actually wrote this call
+- `duplicates` (alias `ignored`) = rows already present (INSERT OR IGNORE)
+- Success condition on phone: `inserted + duplicates >= count`
+- Missing `duplicates` field is treated as 0 (pre-fix behaviour)
+- Non-ok status or partial accounting keeps the batch pending
+
+## Transport
+
+1. **MQTT** – publish to `armband/ios/batch` (current)
+2. Future: BLE + bluetooth-central for true offline path across app suspension
+
+## Failure / cancel semantics (Fix Pack 2)
+
+- Publish failure or disconnect → fail-fast, data kept pending, no 15 s stall
+- User cancel / intentional disconnect (nil reason) → silent settle, no red UI
+- Unexpected disconnect → one error surfaced
+- Late ACK after timeout is ignored; re-send path settles cleanly once duplicates are reported
+- Repeated partial on the same head id surfaces "Sync wedged" naming the missing ACK field
 
 ## Status reporting
 
-- App shows last successful sync time and number of pending records
-- Optional push notification when a large backlog is cleared
+- App shows last successful sync time, last batch count, pending count, and lastError
