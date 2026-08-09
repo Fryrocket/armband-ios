@@ -1,1 +1,1 @@
-// placeholder will be replaced
+// RESTORE_PENDING - content too large for single message, will use create_or_update
