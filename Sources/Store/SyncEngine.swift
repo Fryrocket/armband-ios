@@ -15,6 +15,8 @@
 //   - device_id is stable per install (was a fresh UUID on every batch).
 //   - dumpToPi cannot spin forever if markSynced ever fails to shrink the
 //     unsynced set.
+//   - Success path goes through finishBatch (single settlement path) so
+//     cancel / remove / resume / markSynced stay in one place.
 //
 
 import Foundation
@@ -207,16 +209,9 @@ final class SyncEngine: ObservableObject {
             return
         }
 
-        // Success path
-        cancelTimeout(batchId)
-        pendingAcks.removeValue(forKey: batchId)
-        store.markSynced(ids: ids)
-        lastError = nil
+        // Success — single settlement path
         print("[SyncEngine] ACK batch \(batchId.prefix(8))... inserted=\(inserted)")
-
-        if let waiter = ackWaiters.removeValue(forKey: batchId) {
-            waiter.resume(returning: true)
-        }
+        finishBatch(batchId: batchId, success: true, error: nil, markSyncedIds: ids)
     }
 
     /// Fail every in-flight batch (disconnect or forced teardown)
@@ -231,17 +226,32 @@ final class SyncEngine: ObservableObject {
         pendingAcks[batchId] != nil || ackWaiters[batchId] != nil
     }
 
-    /// Idempotent: a batch that has already been settled is left alone, so a
-    /// stale timeout or a duplicate error ACK cannot overwrite lastError or
-    /// double-resume a continuation.
-    private func finishBatch(batchId: String, success: Bool, error: String?) {
+    /// Idempotent single settlement path for both success and failure.
+    /// A batch that has already been settled is left alone, so a stale timeout
+    /// or a duplicate error ACK cannot overwrite lastError or double-resume a
+    /// continuation. On success, markSynced is applied here so there is only
+    /// one place that mutates pending state + store + waiter.
+    private func finishBatch(
+        batchId: String,
+        success: Bool,
+        error: String?,
+        markSyncedIds: [UUID]? = nil
+    ) {
         guard isPending(batchId) else { return }
 
         cancelTimeout(batchId)
         pendingAcks.removeValue(forKey: batchId)
-        if let error {
+
+        if success, let ids = markSyncedIds {
+            store.markSynced(ids: ids)
+            // Clear only on an actual successful settlement. dumpToPi already
+            // zeros lastError at start; this keeps the UI clean across a
+            // multi-batch dump without resurrecting a prior-run error.
+            lastError = nil
+        } else if let error {
             lastError = error
         }
+
         if let waiter = ackWaiters.removeValue(forKey: batchId) {
             waiter.resume(returning: success)
         }

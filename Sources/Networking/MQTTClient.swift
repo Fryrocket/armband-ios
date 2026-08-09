@@ -13,6 +13,8 @@
 //   - connect timeout task returns on cancellation instead of relying solely on
 //     the isConnecting guard.
 //   - the delegate proxy is cleared alongside the old client on reconnect.
+//   - Delegate callbacks hoist the weak owner outside Task { @MainActor in ... }
+//     so Swift 6 does not treat the non-Sendable proxy as captured.
 //
 
 import Foundation
@@ -164,7 +166,8 @@ final class MQTTClient: ObservableObject {
     // MARK: - Delegate callbacks
 
     fileprivate func handleMessage(topic: String, data: Data) {
-        if topic == "armband/ppg" || topic.hasSuffix("/ppg") {
+        // hasSuffix covers both "armband/ppg" and any future ".../ppg"
+        if topic.hasSuffix("/ppg") {
             // Hot path: one message per reading. Only touch @Published state
             // when explicitly debugging, otherwise every reading invalidates
             // every view observing this object.
@@ -179,7 +182,7 @@ final class MQTTClient: ObservableObject {
 
         lastMessage = String(data: data, encoding: .utf8)
 
-        if topic == "armband/ios/batch/ack" || topic.hasSuffix("/batch/ack") {
+        if topic.hasSuffix("/batch/ack") {
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let batchId = json["batch_id"] as? String else { return }
 
@@ -224,13 +227,21 @@ private final class MQTTDelegateProxy: CocoaMQTTDelegate {
     weak var owner: MQTTClient?
     init(owner: MQTTClient) { self.owner = owner }
 
+    // Hoist the weak owner outside the Task so we do not capture the
+    // non-Sendable proxy (self) into a @MainActor-isolated closure.
+    // MQTTClient is @MainActor and therefore Sendable.
     func mqtt(_ mqtt: CocoaMQTT, didConnectAck ack: CocoaMQTTConnAck) {
+        let owner = self.owner
         Task { @MainActor in owner?.handleConnect() }
     }
     func mqtt(_ mqtt: CocoaMQTT, didReceiveMessage message: CocoaMQTTMessage, id: UInt16) {
-        Task { @MainActor in owner?.handleMessage(topic: message.topic, data: Data(message.payload)) }
+        let owner = self.owner
+        let topic = message.topic
+        let data = Data(message.payload)
+        Task { @MainActor in owner?.handleMessage(topic: topic, data: data) }
     }
     func mqtt(_ mqtt: CocoaMQTT, didDisconnectWithError err: Error?) {
+        let owner = self.owner
         Task { @MainActor in owner?.handleDisconnect(error: err) }
     }
     func mqtt(_ mqtt: CocoaMQTT, didStateChangeTo state: CocoaMQTTConnState) {}
