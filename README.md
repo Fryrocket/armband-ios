@@ -17,16 +17,16 @@ iOS companion app for the 940 nm PPG armband and Raspberry Pi edge host.
 | Dump-to-Pi batch engine | ✅ Done |
 | Settings + connection status | ✅ Done |
 | Session start/stop | ✅ Done |
-| Xcode setup guide | ✅ Done |
+| Xcode setup guide + **checklist** | ✅ Done |
 | Real BLE | ⏳ Future (needs firmware support) |
 | Background sync | ⏳ Next |
 
 ## Quick start
 
-1. Follow **[docs/XCODE_SETUP.md](docs/XCODE_SETUP.md)** – creates the Xcode project and wires everything.
-2. Change the Pi IP in `Sources/App/ArmbandIOSApp.swift`.
-3. Add the CocoaMQTT package.
-4. Run on your iPhone.
+1. Follow the **[Setup Checklist](docs/SETUP_CHECKLIST.md)** (or the longer [XCODE_SETUP.md](docs/XCODE_SETUP.md))
+2. Change the Pi IP in `Sources/App/ArmbandIOSApp.swift`
+3. Add the CocoaMQTT package
+4. Run on your iPhone
 
 ## Repository layout
 
@@ -34,8 +34,9 @@ iOS companion app for the 940 nm PPG armband and Raspberry Pi edge host.
 armband-ios/
 ├── README.md
 ├── docs/
-│   ├── XCODE_SETUP.md      ← start here
-│   ├── PROTOCOL.md         ← exact armband JSON
+│   ├── SETUP_CHECKLIST.md  ← start here (checkbox list)
+│   ├── XCODE_SETUP.md
+│   ├── PROTOCOL.md
 │   ├── ARCHITECTURE.md
 │   ├── SYNC_SPEC.md
 │   └── REQUIREMENTS.md
