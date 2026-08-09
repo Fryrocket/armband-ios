@@ -6,6 +6,11 @@
 //  Uses CocoaMQTT (add via Swift Package Manager).
 //  https://github.com/emqx/CocoaMQTT
 //
+//  Fixes:
+//  - Delegate proxy is retained (was deallocated immediately after connect)
+//  - Single-flight connect (no duplicate clients from double onAppear)
+//  - Batch ACK subscription (armband/ios/batch/ack)
+//
 
 import Foundation
 import Combine
@@ -21,6 +26,10 @@ final class MQTTClient: ObservableObject {
     @Published var lastMessage: String?
     
     private var client: AnyObject?
+    /// MUST retain the delegate — CocoaMQTT keeps only a weak reference.
+    private var delegateProxy: AnyObject?
+    private var isConnecting = false
+    
     private let host: String
     private let port: UInt16
     private let clientID: String
@@ -29,12 +38,14 @@ final class MQTTClient: ObservableObject {
     
     /// Called whenever a valid Reading is parsed from the armband topic
     var onReading: ((Reading) -> Void)?
+    /// Called when Pi ACKs a batch dump: (batchId, insertedCount)
+    var onBatchAck: ((String, Int) -> Void)?
     
     init(
         host: String = "192.168.1.100",
         port: UInt16 = 1883,
         clientID: String = "ios-armband-\(UUID().uuidString.prefix(8))",
-        username: String? = "armband",
+        username: String? = nil,
         password: String? = nil
     ) {
         self.host = host
@@ -45,18 +56,32 @@ final class MQTTClient: ObservableObject {
     }
     
     func connect() {
+        guard !isConnected && !isConnecting else { return }
+        isConnecting = true
+        
         #if canImport(CocoaMQTT)
+        if let old = client as? CocoaMQTT {
+            old.delegate = nil
+            old.disconnect()
+        }
+        
         let mqtt = CocoaMQTT(clientID: clientID, host: host, port: port)
         mqtt.username = username
         mqtt.password = password
         mqtt.keepAlive = 60
         mqtt.autoReconnect = true
-        mqtt.delegate = MQTTDelegateProxy(owner: self)
+        mqtt.cleanSession = true
+        
+        let proxy = MQTTDelegateProxy(owner: self)
+        self.delegateProxy = proxy   // retain
+        mqtt.delegate = proxy
+        
         mqtt.connect()
         self.client = mqtt
         #else
         print("[MQTT] CocoaMQTT not linked – using stub")
         lastError = "CocoaMQTT package not added yet"
+        isConnecting = false
         #endif
     }
     
@@ -65,6 +90,7 @@ final class MQTTClient: ObservableObject {
         (client as? CocoaMQTT)?.disconnect()
         #endif
         isConnected = false
+        isConnecting = false
     }
     
     func publish(topic: String, payload: Data) {
@@ -78,23 +104,37 @@ final class MQTTClient: ObservableObject {
     
     fileprivate func handleMessage(topic: String, data: Data) {
         lastMessage = String(data: data, encoding: .utf8)
+        
         if topic == "armband/ppg" || topic.hasSuffix("/ppg") {
             if let reading = Reading.fromFirmwareJSON(data) {
                 onReading?(reading)
             }
+            return
+        }
+        
+        if topic == "armband/ios/batch/ack" || topic.hasSuffix("/batch/ack") {
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let batchId = json["batch_id"] as? String,
+                  (json["status"] as? String) == "ok" else { return }
+            let inserted = (json["inserted"] as? Int) ?? 0
+            onBatchAck?(batchId, inserted)
         }
     }
     
     fileprivate func handleConnect() {
         isConnected = true
+        isConnecting = false
         lastError = nil
         #if canImport(CocoaMQTT)
-        (client as? CocoaMQTT)?.subscribe("armband/ppg", qos: .qos1)
+        guard let mqtt = client as? CocoaMQTT else { return }
+        mqtt.subscribe("armband/ppg", qos: .qos1)
+        mqtt.subscribe("armband/ios/batch/ack", qos: .qos1)
         #endif
     }
     
     fileprivate func handleDisconnect(error: Error?) {
         isConnected = false
+        isConnecting = false
         if let error { lastError = error.localizedDescription }
     }
 }
