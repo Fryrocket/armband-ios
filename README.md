@@ -4,100 +4,86 @@
 
 iOS companion app for the 940 nm PPG armband (`armband-ppg-940nm`) and Raspberry Pi edge host (`armband-ai`).
 
-## Goals
-
-- **Receive** live or buffered data from the armband (via BLE or MQTT bridge)
-- **Store** readings offline on the iPhone when the Pi is unreachable
-- **Graph** heart rate, SpO₂, temperature, motion, and experimental 940 nm reflectance
-- **Sync / dump** stored data to the Raspberry Pi when connection is restored
-- Provide a clean mobile dashboard for calibration sessions and quality monitoring
-
 > ⚠️ Experimental research only. **Not a medical device.** Do not use for treatment decisions.
 
-## Architecture
+## Goals
 
+- Receive live or buffered data from the armband
+- Show graphs (HR, SpO₂, temperature, motion, 940 nm)
+- Store everything offline on the iPhone when the Pi is unreachable
+- Dump / sync stored data to the Pi when connection returns
+- Support calibration session workflow
+
+## Connection Strategy (decided)
+
+**Hybrid approach:**
+
+1. **Primary (mobile / offline)** → BLE from the XIAO ESP32-C3  
+   Phone works anywhere and stores data locally.
+
+2. **Secondary (home network)** → MQTT client that can also subscribe to `armband/ppg`
+
+3. **Sync path** → Phone pushes batches to Pi (`armband/ios/batch` or HTTP) when the Pi is reachable.
+
+The current firmware only speaks MQTT. Adding a matching BLE characteristic is a future firmware task.
+
+## Exact firmware payload (confirmed)
+
+Topic: `armband/ppg`
+
+```json
+{
+  "bpm": 72,          // -1 = invalid
+  "spo2": 98,         // -1 = invalid
+  "temp": 33.4,       // -1.0 = not yet valid
+  "motion": 10.85,
+  "moving": false,
+  "raw940": 1842,
+  "filt940": 1839.2,
+  "batt": 3.71,
+  "trans": "none",
+  "conn_ms": 1840,
+  "boot": 42
+}
 ```
-Armband (ESP32-C3)
-        │
-        │  BLE (preferred for phone)  or  MQTT (via local network / Pi)
-        ▼
-   iPhone App (this repo)
-        │  • Local Core Data / SQLite store
-        │  • Charts (Swift Charts)
-        │  • Offline queue
-        │
-        │  When Pi is reachable → MQTT or HTTP dump
-        ▼
-Raspberry Pi 5 + Hailo (`armband-ai`)
-        │
-        └── SQLite + quality gates + models + Streamlit
-```
 
-## Planned Features (v0.1)
+See `docs/PROTOCOL.md` for full details.
 
-### Core
-- [ ] BLE connection to XIAO ESP32-C3 (or MQTT client as fallback)
-- [ ] Real-time display of HR, SpO₂, Temp, Motion, 940 nm channel
-- [ ] Local persistent storage (Core Data or SQLite) with offline queue
-- [ ] Automatic / manual sync to Pi when network is available
-- [ ] Swift Charts for live + historical graphs
-
-### Dashboard
-- [ ] Live metrics cards
-- [ ] Multi-line time-series graphs (HR, SpO₂, 940 nm, motion)
-- [ ] Quality indicators (still fraction, clean streak style feedback)
-- [ ] Session recording (start/stop calibration sessions)
-
-### Data Management
-- [ ] Export CSV / JSON of stored sessions
-- [ ] Manual “Dump to Pi” button
-- [ ] Background sync when possible
-- [ ] Clear local data after successful upload
-
-### Nice-to-haves (later)
-- [ ] Apple Watch complication / glanceable HR
-- [ ] Notification when armband disconnects or battery is low
-- [ ] Simple Libre / fingerstick pairing notes entry
-- [ ] Dark mode + large-text accessibility
-
-## Tech Stack (planned)
-
-- **Language**: Swift 5.9+
-- **UI**: SwiftUI + Swift Charts
-- **Storage**: Core Data or GRDB (SQLite)
-- **Networking**: 
-  - CoreBluetooth for direct armband connection
-  - MQTT (CocoaMQTT or similar) for Pi bridge
-- **Minimum iOS**: 17.0 (or 16 if needed)
-
-## Repository Structure (initial)
+## Current scaffolding (2026-08-09)
 
 ```
 armband-ios/
 ├── README.md
 ├── docs/
 │   ├── ARCHITECTURE.md
-│   ├── BLE_PROTOCOL.md
-│   └── SYNC_SPEC.md
-├── App/                    (Xcode project will live here later)
-└── ...
+│   ├── PROTOCOL.md          ← exact JSON from firmware
+│   ├── SYNC_SPEC.md
+│   └── REQUIREMENTS.md
+└── Sources/
+    ├── Models/
+    │   └── Reading.swift    ← data model + JSON parser
+    ├── Store/
+    │   └── ReadingStore.swift ← offline store + pending queue
+    └── Views/
+        └── DashboardView.swift ← metric cards + Swift Charts
 ```
+
+## Next implementation steps
+
+1. Create Xcode project and drop the `Sources` files in
+2. Implement MQTT client (or BLE once firmware supports it)
+3. Wire `ReadingStore` + `DashboardView`
+4. Implement real `SyncEngine` dump to Pi
+5. Add session export (CSV/JSON)
 
 ## Related Repos
 
 | Repo | Role |
 |------|------|
-| [BGM](https://github.com/Fryrocket/BGM) | Umbrella project |
-| [armband-ppg-940nm](https://github.com/Fryrocket/armband-ppg-940nm) | ESP32-C3 firmware |
-| [armband-ai](https://github.com/Fryrocket/armband-ai) | Pi 5 + Hailo host |
-
-## Status
-
-**2026-08-09** – Repository created. Requirements and architecture being defined.  
-No Xcode project committed yet – scaffolding phase.
+| [BGM](https://github.com/Fryrocket/BGM) | Umbrella |
+| [armband-ppg-940nm](https://github.com/Fryrocket/armband-ppg-940nm) | Firmware |
+| [armband-ai](https://github.com/Fryrocket/armband-ai) | Pi 5 + Hailo |
 
 ## License
 
-GNU GPLv3 or later (same family as the rest of BGM).
-
-Experimental personal research project.
+GNU GPLv3 or later.
