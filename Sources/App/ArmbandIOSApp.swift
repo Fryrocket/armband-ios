@@ -15,9 +15,20 @@ struct ArmbandIOSApp: App {
     init() {
         let defaults = UserDefaults.standard
         let host = defaults.string(forKey: "mqtt_host") ?? "192.168.1.100"
-        // TODO: move credentials to Keychain (UserDefaults is plaintext in container)
-        let user = defaults.string(forKey: "mqtt_username")
-        let pass = defaults.string(forKey: "mqtt_password")
+
+        // One-time migration: any credential previously saved to plaintext
+        // UserDefaults moves into the Keychain and is removed from the
+        // .plist. Safe to run every launch — no-op once migrated.
+        if let legacyUser = defaults.string(forKey: "mqtt_username") {
+            KeychainStore.write(account: "mqtt_username", value: legacyUser)
+            defaults.removeObject(forKey: "mqtt_username")
+        }
+        if let legacyPass = defaults.string(forKey: "mqtt_password") {
+            KeychainStore.write(account: "mqtt_password", value: legacyPass)
+            defaults.removeObject(forKey: "mqtt_password")
+        }
+        let user = KeychainStore.read(account: "mqtt_username")
+        let pass = KeychainStore.read(account: "mqtt_password")
         
         let store = ReadingStore()
         let mqtt = MQTTClient(host: host, username: user, password: pass)
