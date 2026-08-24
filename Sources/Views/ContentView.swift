@@ -31,7 +31,9 @@ struct SettingsView: View {
     @EnvironmentObject var syncEngine: SyncEngine
     @State private var mqttUser = ""
     @State private var mqttPass = ""
+    @State private var mqttHost = ""
     @State private var credStatus: String?
+    @State private var hostStatus: String?
 
     var body: some View {
         NavigationStack {
@@ -75,6 +77,22 @@ struct SettingsView: View {
                             mqtt.connect()
                         }
                     }
+
+                    TextField("Broker host", text: $mqttHost)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                    Button("Save host") {
+                        saveMQTTHost()
+                    }
+                    if let hostStatus {
+                        Text(hostStatus)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("Host is not a secret. Stored in the app plist (`mqtt_host`).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("MQTT credentials") {
@@ -142,6 +160,7 @@ struct SettingsView: View {
                 let loaded = MQTTCredentials.load()
                 mqttUser = loaded.username
                 mqttPass = loaded.password
+                mqttHost = MQTTHost.load()
             }
         }
     }
@@ -153,11 +172,23 @@ struct SettingsView: View {
             return
         }
         mqtt.updateBroker(
-            host: mqtt.host,
+            host: MQTTHost.load(),
             port: mqtt.port,
             username: mqttUser.isEmpty ? nil : mqttUser,
             password: mqttPass.isEmpty ? nil : mqttPass
         )
         credStatus = "Saved in Keychain"
+    }
+
+    private func saveMQTTHost() {
+        let stored = MQTTHost.save(mqttHost)
+        mqttHost = stored
+        mqtt.updateBroker(
+            host: stored,
+            port: mqtt.port,
+            username: mqtt.username,
+            password: mqtt.password
+        )
+        hostStatus = "Host saved: \(stored)"
     }
 }

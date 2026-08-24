@@ -14,7 +14,7 @@ struct ArmbandIOSApp: App {
     
     init() {
         let defaults = UserDefaults.standard
-        let host = defaults.string(forKey: "mqtt_host") ?? "192.168.1.100"
+        let host = MQTTHost.load(defaults)
 
         // One-time migration: any credential previously saved to plaintext
         // UserDefaults moves into the Keychain and is removed from the
