@@ -157,11 +157,15 @@ final class SyncEngine: ObservableObject {
                 if let spo2 = r.spo2 { dict["spo2"] = spo2 }
                 if let temp = r.temperature { dict["temp"] = temp }
                 if let sid = r.sessionId { dict["session_id"] = sid.uuidString }
+                if let subj = r.subjectId { dict["subject_id"] = subj }
                 return dict
             }
         ]
         if let sid = store.currentSessionId {
             payload["session_id"] = sid.uuidString
+        }
+        if let subj = store.currentSubjectId {
+            payload["subject_id"] = subj
         }
 
         let data: Data
