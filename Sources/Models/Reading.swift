@@ -106,7 +106,7 @@ struct Reading: Identifiable, Codable, Equatable {
         }
         
         func numberDouble(_ key: String) -> Double {
-            if let v = json[key] as? Double { raw = v }
+            if let v = json[key] as? Double { return v }
             if let v = json[key] as? Int { return Double(v) }
             if let n = json[key] as? NSNumber { return n.doubleValue }
             return 0
