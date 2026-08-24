@@ -64,7 +64,7 @@ armband-ios/
 - [Sources/Models/Reading.swift](Sources/Models/Reading.swift) — data model + firmware JSON parser
 - [Sources/Networking/MQTTClient.swift](Sources/Networking/MQTTClient.swift) — CocoaMQTT wrapper, delegate proxy
 - [Sources/Store/DeviceIdentity.swift](Sources/Store/DeviceIdentity.swift) — stable per-install device id
-- [Sources/Store/KeychainStore.swift](Sources/Store/KeychainStore.swift) — MQTT username/password in Keychain
+- [Sources/Store/KeychainStore.swift](Sources/Store/KeychainStore.swift)
 - [Sources/Store/ReadingStore.swift](Sources/Store/ReadingStore.swift) — offline store, debounced saves, pending queue
 - [Sources/Store/SyncEngine.swift](Sources/Store/SyncEngine.swift) — batch dump, ACK handling, cancellation
 - [Sources/Views/ContentView.swift](Sources/Views/ContentView.swift) — tab shell + settings
@@ -87,6 +87,9 @@ armband-ios/
 
 **Config**
 - [LICENSE](LICENSE)
+
+**Other**
+- [Tests/KeychainStoreTests.swift](Tests/KeychainStoreTests.swift)
 
 ## Connection strategy
 
