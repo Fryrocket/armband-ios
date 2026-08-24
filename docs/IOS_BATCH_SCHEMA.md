@@ -30,6 +30,7 @@ Top-level (always):
 | `count` | int | `readings.count` (pre-halve if oversized) |
 | `readings` | array | see below |
 | `session_id` | string UUID, optional | `store.currentSessionId` if a session is open |
+| `subject_id` | string, optional | Closed enum `SUBJ_A` / `SUBJ_B`. Omitted when unset. |
 
 Per reading (always):
 
@@ -52,6 +53,7 @@ Per reading (omitted if nil):
 | `spo2` | int |
 | `temp` | number |
 | `session_id` | UUID string |
+| `subject_id` | `SUBJ_A` / `SUBJ_B` |
 
 Size guard: if serialized payload > 32768 bytes and batch has >1 reading, phone halves and retries. Single-reading oversize fails honestly.
 
@@ -72,7 +74,7 @@ Phone success: `inserted + duplicates >= ids.count`. Missing `duplicates` treate
 
 ## Ingest match (`logger.py`)
 
-Pi prefers **per-reading** `session_id`, falls back to batch-level. Maps phone fields 1:1 (`bpm/spo2/temp/motion/moving/raw940/filt940/batt/trans/ts/id`) plus `source`, `batch_id`, `device_id`. Idempotent insert via `source_id`. **Matches.** `connectMs` / `bootCount` live on firmware PPG path only, not on iOS dump.
+Pi prefers **per-reading** `session_id`, falls back to batch-level. Maps phone fields 1:1 (`bpm/spo2/temp/motion/moving/raw940/filt940/batt/trans/ts/id`) plus `source`, `batch_id`, `device_id`. Idempotent insert via `source_id`. **Matches.** `connectMs` / `bootCount` live on firmware PPG path only, not on iOS dump. Optional `subject_id` is on the wire; ingest does not yet copy it into a first-class column (session→subject map still used for fits).
 
 ## Dashboard / live path
 

@@ -17,7 +17,12 @@ def iso_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
-def make_reading(*, session_id: str | None, with_vitals: bool = True) -> dict:
+def make_reading(
+    *,
+    session_id: str | None,
+    subject_id: str | None = None,
+    with_vitals: bool = True,
+) -> dict:
     row = {
         "id": str(uuid.uuid4()),
         "ts": iso_now(),
@@ -34,12 +39,18 @@ def make_reading(*, session_id: str | None, with_vitals: bool = True) -> dict:
         row["temp"] = 36.4
     if session_id:
         row["session_id"] = session_id
+    if subject_id:
+        row["subject_id"] = subject_id
     return row
 
 
-def make_batch(n: int, *, session_open: bool) -> dict:
+def make_batch(
+    n: int, *, session_open: bool, subject_id: str | None = None
+) -> dict:
     sid = str(uuid.uuid4()) if session_open else None
-    readings = [make_reading(session_id=sid) for _ in range(n)]
+    readings = [
+        make_reading(session_id=sid, subject_id=subject_id) for _ in range(n)
+    ]
     payload: dict = {
         "source": "ios",
         "device_id": "test-device-id",
@@ -49,6 +60,8 @@ def make_batch(n: int, *, session_open: bool) -> dict:
     }
     if sid:
         payload["session_id"] = sid
+    if subject_id:
+        payload["subject_id"] = subject_id
     return payload
 
 
@@ -129,6 +142,21 @@ def main() -> int:
     ok4 = len(raw.encode()) > MAX_PAYLOAD
     print("oversize single detected", "PASS" if ok4 else "FAIL", "bytes", len(raw.encode()))
     failures += not ok4
+
+    b5 = make_batch(1, session_open=True, subject_id="SUBJ_A")
+    errs5 = required_fields_ok(b5)
+    ok5 = (
+        not errs5
+        and b5.get("subject_id") == "SUBJ_A"
+        and b5["readings"][0].get("subject_id") == "SUBJ_A"
+    )
+    print("optional subject_id present", "PASS" if ok5 else "FAIL", "errs", errs5)
+    failures += not ok5
+
+    b6 = make_batch(1, session_open=False)
+    ok6 = "subject_id" not in b6 and "subject_id" not in b6["readings"][0]
+    print("subject_id omitted when unset", "PASS" if ok6 else "FAIL")
+    failures += not ok6
 
     print("RESULT", "PASS" if failures == 0 else f"FAIL ({failures})")
     return 1 if failures else 0
