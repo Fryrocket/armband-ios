@@ -66,6 +66,7 @@ armband-ios/
 - [Sources/Networking/MQTTClient.swift](Sources/Networking/MQTTClient.swift) — CocoaMQTT wrapper, delegate proxy
 - [Sources/Store/DeviceIdentity.swift](Sources/Store/DeviceIdentity.swift) — stable per-install device id
 - [Sources/Store/KeychainStore.swift](Sources/Store/KeychainStore.swift)
+- [Sources/Store/MQTTCredentials.swift](Sources/Store/MQTTCredentials.swift)
 - [Sources/Store/ReadingStore.swift](Sources/Store/ReadingStore.swift) — offline store, debounced saves, pending queue
 - [Sources/Store/SyncEngine.swift](Sources/Store/SyncEngine.swift) — batch dump, ACK handling, cancellation
 - [Sources/Views/ContentView.swift](Sources/Views/ContentView.swift) — tab shell + settings
@@ -82,6 +83,7 @@ armband-ios/
 
 **Scripts**
 - [scripts/check_keychain_store.py](scripts/check_keychain_store.py)
+- [scripts/check_mqtt_cred_ui.py](scripts/check_mqtt_cred_ui.py)
 - [scripts/check_subject_picker.py](scripts/check_subject_picker.py)
 - [scripts/generate_changelog.py](scripts/generate_changelog.py)
 - [scripts/mock_ios_batch.py](scripts/mock_ios_batch.py)
@@ -92,6 +94,7 @@ armband-ios/
 
 **Other**
 - [Tests/KeychainStoreTests.swift](Tests/KeychainStoreTests.swift)
+- [Tests/MQTTCredentialsTests.swift](Tests/MQTTCredentialsTests.swift)
 - [Tests/SubjectIDTests.swift](Tests/SubjectIDTests.swift)
 
 ## Connection strategy
