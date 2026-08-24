@@ -29,7 +29,10 @@ struct SettingsView: View {
     @EnvironmentObject var mqtt: MQTTClient
     @EnvironmentObject var store: ReadingStore
     @EnvironmentObject var syncEngine: SyncEngine
-    
+    @State private var mqttUser = ""
+    @State private var mqttPass = ""
+    @State private var credStatus: String?
+
     var body: some View {
         NavigationStack {
             Form {
@@ -72,6 +75,24 @@ struct SettingsView: View {
                             mqtt.connect()
                         }
                     }
+                }
+
+                Section("MQTT credentials") {
+                    TextField("Username", text: $mqttUser)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    SecureField("Password", text: $mqttPass)
+                    Button("Save to Keychain") {
+                        saveMQTTCredentials()
+                    }
+                    if let credStatus {
+                        Text(credStatus)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("Stored in Keychain only. Never the app plist.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 
                 Section("Sync") {
@@ -117,6 +138,26 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .onAppear {
+                let loaded = MQTTCredentials.load()
+                mqttUser = loaded.username
+                mqttPass = loaded.password
+            }
         }
+    }
+
+    private func saveMQTTCredentials() {
+        let ok = MQTTCredentials.save(username: mqttUser, password: mqttPass)
+        guard ok else {
+            credStatus = "Keychain write failed — not stored"
+            return
+        }
+        mqtt.updateBroker(
+            host: mqtt.host,
+            port: mqtt.port,
+            username: mqttUser.isEmpty ? nil : mqttUser,
+            password: mqttPass.isEmpty ? nil : mqttPass
+        )
+        credStatus = "Saved in Keychain"
     }
 }
