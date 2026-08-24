@@ -70,6 +70,7 @@ armband-ios/
 
 **Docs**
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/IOS_BATCH_SCHEMA.md](docs/IOS_BATCH_SCHEMA.md)
 - [docs/PROTOCOL.md](docs/PROTOCOL.md) — firmware JSON payload
 - [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)
 - [docs/SETUP_CHECKLIST.md](docs/SETUP_CHECKLIST.md) — start here
@@ -78,6 +79,7 @@ armband-ios/
 
 **Scripts**
 - [scripts/generate_changelog.py](scripts/generate_changelog.py)
+- [scripts/mock_ios_batch.py](scripts/mock_ios_batch.py)
 - [scripts/update_file_index.py](scripts/update_file_index.py)
 
 **Config**
