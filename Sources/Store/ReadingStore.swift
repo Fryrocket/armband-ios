@@ -15,6 +15,14 @@ final class ReadingStore: ObservableObject {
     @Published private(set) var readings: [Reading] = []
     @Published private(set) var pendingCount: Int = 0
     @Published var currentSessionId: UUID?
+    /// Closed Subject_ID from Settings. Nil until the operator picks one.
+    /// Persisted in UserDefaults (`SubjectID.defaultsKey`). Re-seat does not
+    /// clear this — re-seat is a new session, not a new subject.
+    @Published var currentSubjectId: String? {
+        didSet {
+            persistSubjectId()
+        }
+    }
     
     private let maxReadings = 5_000
     private let fileURL: URL
@@ -26,12 +34,20 @@ final class ReadingStore: ObservableObject {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         fileURL = docs.appendingPathComponent("readings.json")
         load()
+        loadSubjectId()
+    }
+
+    func setSubject(_ id: SubjectID?) {
+        currentSubjectId = id?.rawValue
     }
     
     func add(_ reading: Reading) {
         var r = reading
         if r.sessionId == nil {
             r.sessionId = currentSessionId
+        }
+        if r.subjectId == nil {
+            r.subjectId = currentSubjectId
         }
         readings.append(r)
         if !r.synced {
@@ -43,6 +59,20 @@ final class ReadingStore: ObservableObject {
     
     func startSession() { currentSessionId = UUID() }
     func stopSession() { currentSessionId = nil }
+
+    private func loadSubjectId() {
+        let stored = UserDefaults.standard.string(forKey: SubjectID.defaultsKey)
+        currentSubjectId = SubjectID.parse(stored)?.rawValue
+    }
+
+    private func persistSubjectId() {
+        let defaults = UserDefaults.standard
+        if let v = currentSubjectId, SubjectID.parse(v) != nil {
+            defaults.set(v, forKey: SubjectID.defaultsKey)
+        } else {
+            defaults.removeObject(forKey: SubjectID.defaultsKey)
+        }
+    }
     
     func markSynced(ids: [UUID]) {
         let idSet = Set(ids)
