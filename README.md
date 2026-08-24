@@ -82,6 +82,7 @@ armband-ios/
 
 **Scripts**
 - [scripts/check_keychain_store.py](scripts/check_keychain_store.py)
+- [scripts/check_subject_picker.py](scripts/check_subject_picker.py)
 - [scripts/generate_changelog.py](scripts/generate_changelog.py)
 - [scripts/mock_ios_batch.py](scripts/mock_ios_batch.py)
 - [scripts/update_file_index.py](scripts/update_file_index.py)
