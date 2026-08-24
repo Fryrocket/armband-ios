@@ -43,8 +43,8 @@ struct DashboardView: View {
                     
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         MetricCard(title: "Heart Rate", value: latest?.bpm.map { "\($0)" } ?? "--", unit: "bpm")
-                        MetricCard(title: "SpO₂", value: latest?.spo2.map { "\($0)" } ?? "--", unit: "%")
-                        MetricCard(title: "Temp", value: latest?.temperature.map { String(format: "%.1f", $0) } ?? "--", unit: "°C")
+                        MetricCard(title: "SpO2", value: latest?.spo2.map { "\($0)" } ?? "--", unit: "%")
+                        MetricCard(title: "Temp", value: latest?.temperature.map { String(format: "%.1f", $0) } ?? "--", unit: "C")
                         MetricCard(title: "Battery", value: latest.map { String(format: "%.2f", $0.batteryVoltage) } ?? "--", unit: "V")
                         MetricCard(title: "940 nm", value: latest.map { String(format: "%.0f", $0.filt940) } ?? "--", unit: "")
                         MetricCard(title: "Motion", value: latest.map { String(format: "%.1f", $0.motion) } ?? "--",
@@ -93,6 +93,10 @@ struct DashboardView: View {
                                 .buttonStyle(.borderedProminent)
                                 .tint(.red)
                         }
+                        Spacer()
+                        Text(store.currentSubjectId ?? "subject unset")
+                            .font(.caption)
+                            .foregroundStyle(store.currentSubjectId == nil ? .orange : .secondary)
                     }
                     .padding()
                 }
