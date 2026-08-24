@@ -24,6 +24,7 @@ struct Reading: Identifiable, Codable, Equatable {
     var bootCount: UInt32?
     
     var sessionId: UUID?
+    var subjectId: String?
     var synced: Bool
     var source: String
     
@@ -42,6 +43,7 @@ struct Reading: Identifiable, Codable, Equatable {
         connectMs: UInt32? = nil,
         bootCount: UInt32? = nil,
         sessionId: UUID? = nil,
+        subjectId: String? = nil,
         synced: Bool = false,
         source: String = "ble"
     ) {
@@ -59,6 +61,7 @@ struct Reading: Identifiable, Codable, Equatable {
         self.connectMs = connectMs
         self.bootCount = bootCount
         self.sessionId = sessionId
+        self.subjectId = subjectId
         self.synced = synced
         self.source = source
     }
@@ -103,7 +106,7 @@ struct Reading: Identifiable, Codable, Equatable {
         }
         
         func numberDouble(_ key: String) -> Double {
-            if let v = json[key] as? Double { return v }
+            if let v = json[key] as? Double { raw = v }
             if let v = json[key] as? Int { return Double(v) }
             if let n = json[key] as? NSNumber { return n.doubleValue }
             return 0
