@@ -65,7 +65,7 @@ Use this list to go from zero to a running app on your iPhone.
   ```swift
   host: "192.168.x.x"   // ← your Pi IP
   ```
-- [ ] Set `username` / `password` if your Mosquitto broker requires auth
+- [ ] If Mosquitto requires auth, write credentials with `KeychainStore.write(account:value:)` (`mqtt_username` / `mqtt_password`). Do not store them in UserDefaults.
 
 ---
 

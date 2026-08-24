@@ -48,7 +48,8 @@ armband-ios/
     ├── Store/
     │   ├── ReadingStore.swift
     │   ├── SyncEngine.swift
-    │   └── DeviceIdentity.swift
+    │   ├── DeviceIdentity.swift
+    │   └── KeychainStore.swift
     ├── Networking/
     │   └── MQTTClient.swift
     └── Views/
@@ -63,7 +64,7 @@ armband-ios/
 - [Sources/Models/Reading.swift](Sources/Models/Reading.swift) — data model + firmware JSON parser
 - [Sources/Networking/MQTTClient.swift](Sources/Networking/MQTTClient.swift) — CocoaMQTT wrapper, delegate proxy
 - [Sources/Store/DeviceIdentity.swift](Sources/Store/DeviceIdentity.swift) — stable per-install device id
-- [Sources/Store/KeychainStore.swift](Sources/Store/KeychainStore.swift)
+- [Sources/Store/KeychainStore.swift](Sources/Store/KeychainStore.swift) — MQTT username/password in Keychain
 - [Sources/Store/ReadingStore.swift](Sources/Store/ReadingStore.swift) — offline store, debounced saves, pending queue
 - [Sources/Store/SyncEngine.swift](Sources/Store/SyncEngine.swift) — batch dump, ACK handling, cancellation
 - [Sources/Views/ContentView.swift](Sources/Views/ContentView.swift) — tab shell + settings
@@ -79,6 +80,7 @@ armband-ios/
 - [docs/XCODE_SETUP.md](docs/XCODE_SETUP.md)
 
 **Scripts**
+- [scripts/check_keychain_store.py](scripts/check_keychain_store.py)
 - [scripts/generate_changelog.py](scripts/generate_changelog.py)
 - [scripts/mock_ios_batch.py](scripts/mock_ios_batch.py)
 - [scripts/update_file_index.py](scripts/update_file_index.py)

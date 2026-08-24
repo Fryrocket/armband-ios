@@ -1,9 +1,19 @@
+//
+//  KeychainStore.swift
+//  ArmbandIOS
+//
+//  Minimal generic-password Keychain wrapper for MQTT broker credentials.
+//  Free functions (not an ObservableObject) — needed before any SwiftUI
+//  environment exists, in ArmbandIOSApp.init().
+//
+//  kSecAttrAccessibleAfterFirstUnlock (not WhenUnlocked) so SyncEngine /
+//  MQTTClient can reconnect from a background task after the device is locked
+//  (matches autoReconnect = true / persistent-session in MQTTClient.connect()).
+//
+
 import Foundation
 import Security
 
-/// Minimal generic-password Keychain wrapper for MQTT broker credentials.
-/// Free functions (not an ObservableObject) — needed before any SwiftUI
-/// environment exists, in ArmbandIOSApp.init().
 enum KeychainStore {
     static var service = "com.fryrocket.armbandios.mqtt"
 
@@ -49,5 +59,17 @@ enum KeychainStore {
         ]
         let status = SecItemDelete(query as CFDictionary)
         return status == errSecSuccess || status == errSecItemNotFound
+    }
+
+    /// One-time migration: plaintext UserDefaults credentials move into the
+    /// Keychain and are removed from the .plist only after a successful write.
+    /// Safe to run every launch — no-op once migrated.
+    static func migrateLegacyUserDefaults(_ defaults: UserDefaults = .standard) {
+        for account in ["mqtt_username", "mqtt_password"] {
+            guard let legacy = defaults.string(forKey: account) else { continue }
+            if write(account: account, value: legacy) {
+                defaults.removeObject(forKey: account)
+            }
+        }
     }
 }

@@ -19,14 +19,7 @@ struct ArmbandIOSApp: App {
         // One-time migration: any credential previously saved to plaintext
         // UserDefaults moves into the Keychain and is removed from the
         // .plist. Safe to run every launch — no-op once migrated.
-        if let legacyUser = defaults.string(forKey: "mqtt_username") {
-            KeychainStore.write(account: "mqtt_username", value: legacyUser)
-            defaults.removeObject(forKey: "mqtt_username")
-        }
-        if let legacyPass = defaults.string(forKey: "mqtt_password") {
-            KeychainStore.write(account: "mqtt_password", value: legacyPass)
-            defaults.removeObject(forKey: "mqtt_password")
-        }
+        KeychainStore.migrateLegacyUserDefaults(defaults)
         let user = KeychainStore.read(account: "mqtt_username")
         let pass = KeychainStore.read(account: "mqtt_password")
         

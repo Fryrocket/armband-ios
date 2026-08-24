@@ -58,7 +58,7 @@ Open `Sources/App/ArmbandIOSApp.swift` and change:
 host: "192.168.1.100"   // ← put your real Pi IP here
 ```
 
-Also set username/password if your Mosquitto broker requires them.
+MQTT username/password live in the Keychain (`KeychainStore`). Call `KeychainStore.write(account:value:)` with `mqtt_username` / `mqtt_password` — do not put them in UserDefaults. Any leftover plaintext keys are migrated on launch.
 
 ## 6. Build & Run
 
