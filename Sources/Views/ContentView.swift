@@ -33,6 +33,21 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Subject") {
+                    Picker("Subject ID", selection: Binding(
+                        get: { store.currentSubjectId ?? "" },
+                        set: { store.setSubject(SubjectID.parse($0.isEmpty ? nil : $0)) }
+                    )) {
+                        Text("Not set").tag("")
+                        ForEach(SubjectID.allCases) { s in
+                            Text(s.rawValue).tag(s.rawValue)
+                        }
+                    }
+                    Text("S001 uses SUBJ_A. Re-seat is a new session, not a new subject.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("Connection") {
                     HStack {
                         Text("MQTT")
