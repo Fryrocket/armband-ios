@@ -9,15 +9,13 @@
 //    swift build     # host (macOS): every source file incl. CocoaMQTT + views
 //    swift test      # host (macOS): 14/14 — Keychain / creds / host / subject
 //
-//    xcodebuild build -scheme ArmbandIOS \        # iOS: full compile, incl. CocoaMQTT
-//      -destination 'platform=iOS Simulator,name=iPhone 17'
-//    xcodebuild test  -scheme ArmbandIOS ...      # iOS: 7/14 (see below)
+//  For a full iOS run (SwiftUI on device + Keychain tests, which need a host
+//  app — a bare SwiftPM xctest bundle has no keychain entitlement on iOS and
+//  SecItemAdd returns errSecMissingEntitlement / -34018), use the checked-in
+//  Xcode project instead:
 //
-//  The 7 Keychain-touching tests FAIL under `xcodebuild test` on iOS: a bare
-//  SwiftPM xctest bundle has no host app, so SecItemAdd returns
-//  errSecMissingEntitlement (-34018). Run them on the macOS host (`swift test`),
-//  or add an iOS test-host app target (a generated .xcodeproj) for a full
-//  on-device run. Not a code defect.
+//    xcodebuild test -project ArmbandIOS.xcodeproj -scheme ArmbandIOS \
+//      -destination 'platform=iOS Simulator,name=iPhone 17'   # 14/14
 //
 //  The SwiftUI entry point (Sources/App/ArmbandIOSApp.swift) is excluded:
 //  a library target cannot carry `@main`. Add that file to the App target

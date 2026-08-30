@@ -1,6 +1,14 @@
 # Xcode Setup Guide – Armband iOS
 
-Follow these steps to get a working project on your Mac.
+> **The repo now ships `ArmbandIOS.xcodeproj`.** Just open it:
+> `open ArmbandIOS.xcodeproj`, pick a simulator, ⌘R. CocoaMQTT resolves via
+> SPM automatically; the local-network Info.plist keys and the XCTest host
+> app are already wired. `xcodebuild test -project ArmbandIOS.xcodeproj
+> -scheme ArmbandIOS -destination 'platform=iOS Simulator,name=iPhone 17'`
+> → 14/14.
+>
+> The manual steps below are kept only as a reference for rebuilding the
+> project from scratch or adding it to a larger workspace.
 
 ## 1. Create the Xcode project
 
