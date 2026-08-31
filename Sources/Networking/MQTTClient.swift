@@ -239,7 +239,7 @@ private final class MQTTDelegateProxy: CocoaMQTTDelegate {
         Task { @MainActor in owner?.handleMessage(topic: topic, data: data) }
     }
 
-    func mqtt(_ mqtt: CocoaMQTT, didDisconnectWithError err: Error?) {
+    func mqttDidDisconnect(_ mqtt: CocoaMQTT, withError err: Error?) {
         let owner = self.owner
         Task { @MainActor in owner?.handleDisconnect(error: err) }
     }

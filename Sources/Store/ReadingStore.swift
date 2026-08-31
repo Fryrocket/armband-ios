@@ -8,7 +8,9 @@
 
 import Foundation
 import Combine
+#if canImport(UIKit)
 import UIKit
+#endif
 
 @MainActor
 final class ReadingStore: ObservableObject {
@@ -99,6 +101,7 @@ final class ReadingStore: ObservableObject {
     
     func flush() {
         saveTask?.cancel()
+        #if canImport(UIKit)
         var bgTask = UIBackgroundTaskIdentifier.invalid
         bgTask = UIApplication.shared.beginBackgroundTask {
             UIApplication.shared.endBackgroundTask(bgTask)
@@ -109,6 +112,9 @@ final class ReadingStore: ObservableObject {
                 UIApplication.shared.endBackgroundTask(bgTask)
             }
         }
+        #else
+        saveNow(completion: nil)
+        #endif
     }
     
     private func enforceCap() {
