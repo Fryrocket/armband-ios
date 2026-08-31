@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/cache-stats.json'
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/cache-stats.json'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Build & test
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Host — swift build
+        run: swift build
+
+      - name: iOS — xcodebuild test (Simulator)
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project ArmbandIOS.xcodeproj \
+            -scheme ArmbandIOS \
+            -destination 'platform=iOS Simulator,OS=latest,name=iPhone 16' \
+            -resultBundlePath TestResults.xcresult \
+            -skipMacroValidation \
+            | tee xcodebuild.log
+
+      - name: Upload result bundle
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult
+          path: TestResults.xcresult
+          if-no-files-found: ignore
+          retention-days: 14

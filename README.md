@@ -1,5 +1,7 @@
 # Armband iOS – BGM Companion App
 
+[![CI](https://github.com/Fryrocket/armband-ios/actions/workflows/ci.yml/badge.svg)](https://github.com/Fryrocket/armband-ios/actions/workflows/ci.yml)
+
 **Part of the [BGM](https://github.com/Fryrocket/BGM) experimental wearable project.**
 
 iOS companion app for the 940 nm PPG armband and Raspberry Pi edge host.
