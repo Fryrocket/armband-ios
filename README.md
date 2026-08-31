@@ -72,6 +72,7 @@ armband-ios/
 - [Sources/Store/SyncEngine.swift](Sources/Store/SyncEngine.swift) — batch dump, ACK handling, cancellation
 - [Sources/Views/ContentView.swift](Sources/Views/ContentView.swift) — tab shell + settings
 - [Sources/Views/DashboardView.swift](Sources/Views/DashboardView.swift) — metric cards + Swift Charts
+- [Sources/Views/SwiftUICompat.swift](Sources/Views/SwiftUICompat.swift)
 
 **Docs**
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
@@ -92,9 +93,16 @@ armband-ios/
 - [scripts/update_file_index.py](scripts/update_file_index.py)
 
 **Config**
+- [.gitignore](.gitignore)
 - [LICENSE](LICENSE)
 
 **Other**
+- [ArmbandIOS.xcodeproj/project.pbxproj](ArmbandIOS.xcodeproj/project.pbxproj)
+- [ArmbandIOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved](ArmbandIOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved)
+- [ArmbandIOS.xcodeproj/xcshareddata/xcschemes/ArmbandIOS.xcscheme](ArmbandIOS.xcodeproj/xcshareddata/xcschemes/ArmbandIOS.xcscheme)
+- [ArmbandIOS/Info.plist](ArmbandIOS/Info.plist)
+- [Package.resolved](Package.resolved)
+- [Package.swift](Package.swift)
 - [Tests/KeychainStoreTests.swift](Tests/KeychainStoreTests.swift)
 - [Tests/MQTTCredentialsTests.swift](Tests/MQTTCredentialsTests.swift)
 - [Tests/MQTTHostTests.swift](Tests/MQTTHostTests.swift)
