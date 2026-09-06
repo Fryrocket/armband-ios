@@ -54,8 +54,18 @@ struct DashboardView: View {
                         MetricCard(title: "940 nm", value: latest.map { String(format: "%.0f", $0.filt940) } ?? "--", unit: "")
                         MetricCard(title: "Motion", value: latest.map { String(format: "%.1f", $0.motion) } ?? "--",
                                    unit: latest?.isMoving == true ? "MOV" : "still")
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            let tick = NextReadingCountdown.display(
+                                lastReading: latest?.timestamp,
+                                now: context.date
+                            )
+                            MetricCard(title: "Next reading", value: tick.value, unit: tick.unit)
+                        }
                     }
                     .padding(.horizontal)
+
+                    UploadStatusCard(syncEngine: syncEngine, pendingCount: store.pendingCount)
+                        .padding(.horizontal)
                     
                     chartCard(title: "Heart Rate (bpm)") {
                         Chart {
@@ -165,6 +175,67 @@ struct DualTempCard: View {
                 .font(.headline)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+struct UploadStatusCard: View {
+    @ObservedObject var syncEngine: SyncEngine
+    let pendingCount: Int
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: iconName)
+                .font(.title2)
+                .foregroundStyle(tint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var title: String {
+        if syncEngine.isSyncing { return "Uploading…" }
+        if syncEngine.lastError != nil { return "Upload failed" }
+        if syncEngine.lastSyncTime != nil { return "Upload successful" }
+        return "No upload yet"
+    }
+
+    private var subtitle: String {
+        if syncEngine.isSyncing {
+            return pendingCount > 0 ? "\(pendingCount) pending" : "Sending to Pi"
+        }
+        if let err = syncEngine.lastError { return err }
+        if let t = syncEngine.lastSyncTime {
+            let n = syncEngine.lastBatchCount
+            let when = t.formatted(.relative(presentation: .named))
+            if n > 0 { return "\(n) reading\(n == 1 ? "" : "s") · \(when)" }
+            return when
+        }
+        if pendingCount > 0 { return "\(pendingCount) waiting to dump" }
+        return "Dump to Pi when you have readings"
+    }
+
+    private var iconName: String {
+        if syncEngine.isSyncing { return "arrow.up.circle" }
+        if syncEngine.lastError != nil { return "xmark.circle.fill" }
+        if syncEngine.lastSyncTime != nil { return "checkmark.circle.fill" }
+        return "icloud.and.arrow.up"
+    }
+
+    private var tint: Color {
+        if syncEngine.isSyncing { return .orange }
+        if syncEngine.lastError != nil { return .red }
+        if syncEngine.lastSyncTime != nil { return .green }
+        return .secondary
     }
 }
 
