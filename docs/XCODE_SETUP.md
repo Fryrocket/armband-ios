@@ -1,14 +1,45 @@
 # Xcode Setup Guide – Armband iOS
 
-> **The repo now ships `ArmbandIOS.xcodeproj`.** Just open it:
+> **The repo now ships `ArmbandIOS.xcodeproj`.** Simulator path:
 > `open ArmbandIOS.xcodeproj`, pick a simulator, ⌘R. CocoaMQTT resolves via
-> SPM automatically; the local-network Info.plist keys and the XCTest host
-> app are already wired. `xcodebuild test -project ArmbandIOS.xcodeproj
-> -scheme ArmbandIOS -destination 'platform=iOS Simulator,name=iPhone 17'`
-> → 14/14.
+> SPM automatically; local-network Info.plist keys, Keychain entitlements,
+> and the XCTest host app are already wired.
+> `xcodebuild test -project ArmbandIOS.xcodeproj -scheme ArmbandIOS
+> -destination 'platform=iOS Simulator,name=iPhone 17'` → 14/14.
 >
 > The manual steps below are kept only as a reference for rebuilding the
 > project from scratch or adding it to a larger workspace.
+
+## Put it on your iPhone (this Mac)
+
+Xcode 26.6 is already installed. The project is at
+`~/claude-server/armband-ios/ArmbandIOS.xcodeproj`. Automatic signing is on
+(`com.fryrocket.armbandios`, identity `Apple Development`).
+
+**On the iPhone**
+
+1. Plug in USB (or keep wireless debugging on). Unlock. Trust this computer.
+2. Settings → Privacy & Security → **Developer Mode** → On → restart → Turn On.
+
+**In Xcode**
+
+1. Xcode → **Settings…** (`⌘,`) → **Accounts**.
+2. **+** → Apple ID → sign in (`fryrocket@yahoo.com` on this Mac).
+3. Select the account → **Manage Certificates…** → **+** → **Apple Development** if the list is empty.
+4. In the project navigator, select the blue **ArmbandIOS** project → target **ArmbandIOS** → **Signing & Capabilities**.
+5. Team = your Personal Team. Signing Certificate should become **Apple Development**.
+6. Top bar destination = your iPhone (not a simulator). Product → Run (`⌘R`).
+7. On the phone, if it asks **Untrusted Developer**, go to Settings → General → VPN & Device Management → trust the app.
+
+After the Apple ID is in Accounts and Developer Mode is on, Grok can also
+install from the CLI:
+
+```bash
+xcodebuild -project ArmbandIOS.xcodeproj -scheme ArmbandIOS \
+  -destination 'platform=iOS,id=<UDID>' \
+  -allowProvisioningUpdates \
+  build
+```
 
 ## 1. Create the Xcode project
 

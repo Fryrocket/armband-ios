@@ -6,12 +6,12 @@ Use this list to go from zero to a running app on your iPhone.
 
 ## A. Prerequisites
 
-- [ ] Mac with Xcode 15+ installed (iOS 17 SDK or newer)
-- [ ] Apple ID added in Xcode (Signing & Capabilities)
-- [ ] iPhone (or Simulator) ready
+- [x] Mac with Xcode 15+ installed (this Mac: Xcode 26.6, iOS 26.5 SDK)
+- [ ] Apple ID added in Xcode → Settings → Accounts (needed to sign for a real iPhone)
+- [ ] iPhone: USB connected, Trusted, Developer Mode on
 - [ ] Raspberry Pi running Mosquitto (or other MQTT broker) and reachable on local network
-- [ ] Know your Pi IP address (e.g. `192.168.1.100`)
-- [ ] Armband firmware publishing to topic `armband/ppg` (already working)
+- [ ] Know your Pi IP address (e.g. `192.168.4.26` for EMBER on this LAN)
+- [ ] Armband firmware publishing to topic `armband/ppg`
 
 ---
 
