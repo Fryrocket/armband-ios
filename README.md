@@ -66,6 +66,7 @@ armband-ios/
 - [Sources/Assets.xcassets/Contents.json](Sources/Assets.xcassets/Contents.json)
 - [Sources/Assets.xcassets/ForestBackground.imageset/Contents.json](Sources/Assets.xcassets/ForestBackground.imageset/Contents.json)
 - [Sources/Assets.xcassets/ForestBackground.imageset/ForestBackground.jpg](Sources/Assets.xcassets/ForestBackground.imageset/ForestBackground.jpg)
+- [Sources/Models/GlucoseRef.swift](Sources/Models/GlucoseRef.swift)
 - [Sources/Models/NextReadingCountdown.swift](Sources/Models/NextReadingCountdown.swift)
 - [Sources/Models/Reading.swift](Sources/Models/Reading.swift) — data model + firmware JSON parser
 - [Sources/Models/SubjectID.swift](Sources/Models/SubjectID.swift)
@@ -111,6 +112,7 @@ armband-ios/
 - [ArmbandIOS/Info.plist](ArmbandIOS/Info.plist)
 - [Package.resolved](Package.resolved)
 - [Package.swift](Package.swift)
+- [Tests/GlucoseRefTests.swift](Tests/GlucoseRefTests.swift)
 - [Tests/KeychainStoreTests.swift](Tests/KeychainStoreTests.swift)
 - [Tests/MQTTCredentialsTests.swift](Tests/MQTTCredentialsTests.swift)
 - [Tests/MQTTHostTests.swift](Tests/MQTTHostTests.swift)
