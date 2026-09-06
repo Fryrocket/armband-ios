@@ -123,8 +123,8 @@ struct DashboardView: View {
                 }
                 .padding(.vertical)
             }
-            .navigationTitle("BGM Armband")
-            .hunterGreenScreen()
+            .professionalNavTitle("BGM Armband")
+            .forestGreenScreen()
         }
     }
     

@@ -22,8 +22,8 @@ struct ContentView: View {
                     Label("Settings", systemImage: "gearshape")
                 }
         }
-        .tint(.white)
-        .hunterGreenScreen()
+        .tint(Color.titleIvory)
+        .forestGreenScreen()
     }
 }
 
@@ -157,8 +157,8 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("Settings")
-            .hunterGreenScreen()
+            .professionalNavTitle("Settings")
+            .forestGreenScreen()
             .onAppear {
                 let loaded = MQTTCredentials.load()
                 mqttUser = loaded.username
