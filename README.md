@@ -102,6 +102,7 @@ armband-ios/
 - [ArmbandIOS.xcodeproj/project.pbxproj](ArmbandIOS.xcodeproj/project.pbxproj)
 - [ArmbandIOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved](ArmbandIOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved)
 - [ArmbandIOS.xcodeproj/xcshareddata/xcschemes/ArmbandIOS.xcscheme](ArmbandIOS.xcodeproj/xcshareddata/xcschemes/ArmbandIOS.xcscheme)
+- [ArmbandIOS/ArmbandIOS.entitlements](ArmbandIOS/ArmbandIOS.entitlements)
 - [ArmbandIOS/Info.plist](ArmbandIOS/Info.plist)
 - [Package.resolved](Package.resolved)
 - [Package.swift](Package.swift)
