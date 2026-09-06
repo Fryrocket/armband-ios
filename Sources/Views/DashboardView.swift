@@ -45,10 +45,10 @@ struct DashboardView: View {
                         .padding(.horizontal)
 
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                        MetricCard(title: "Heart Rate", value: latest?.bpm.map { "\($0)" } ?? "--", unit: "bpm")
-                        MetricCard(title: "SpO2", value: latest?.spo2.map { "\($0)" } ?? "--", unit: "%")
-                        MetricCard(title: "Battery", value: latest.map { String(format: "%.2f", $0.batteryVoltage) } ?? "--", unit: "V")
                         ClockDateCard()
+                        MetricCard(title: "Battery", value: latest.map { String(format: "%.2f", $0.batteryVoltage) } ?? "--", unit: "V")
+                        MetricCard(title: "SpO2", value: latest?.spo2.map { "\($0)" } ?? "--", unit: "%")
+                        MetricCard(title: "Heart Rate", value: latest?.bpm.map { "\($0)" } ?? "--", unit: "bpm")
                     }
                     .padding(.horizontal)
 
