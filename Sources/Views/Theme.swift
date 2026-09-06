@@ -1,8 +1,8 @@
 import SwiftUI
 
 extension Color {
-    /// Deep forest green (#1B4332).
-    static let forestGreen = Color(red: 27 / 255, green: 67 / 255, blue: 50 / 255)
+    /// Dark forest green (#0C241C).
+    static let forestGreen = Color(red: 12 / 255, green: 36 / 255, blue: 28 / 255)
     /// Warm ivory for titles on forest green (#F3E9D7).
     static let titleIvory = Color(red: 243 / 255, green: 233 / 255, blue: 215 / 255)
     /// Fire-engine red (#CE2029).
