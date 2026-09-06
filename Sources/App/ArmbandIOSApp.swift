@@ -9,6 +9,7 @@ import SwiftUI
 struct ArmbandIOSApp: App {
     @StateObject private var store: ReadingStore
     @StateObject private var mqtt: MQTTClient
+    @StateObject private var bluetooth: BluetoothManager
     @StateObject private var syncEngine: SyncEngine
     @Environment(\.scenePhase) private var scenePhase
     
@@ -25,8 +26,10 @@ struct ArmbandIOSApp: App {
         
         let store = ReadingStore()
         let mqtt = MQTTClient(host: host, username: user, password: pass)
+        let bluetooth = BluetoothManager()
         _store = StateObject(wrappedValue: store)
         _mqtt = StateObject(wrappedValue: mqtt)
+        _bluetooth = StateObject(wrappedValue: bluetooth)
         _syncEngine = StateObject(wrappedValue: SyncEngine(store: store, mqtt: mqtt))
     }
     
@@ -35,13 +38,21 @@ struct ArmbandIOSApp: App {
             ContentView()
                 .environmentObject(store)
                 .environmentObject(mqtt)
+                .environmentObject(bluetooth)
                 .environmentObject(syncEngine)
                 .onAppear {
-                    if mqtt.onReading == nil {
-                        mqtt.onReading = { [weak store] reading in
+                    if bluetooth.onReading == nil {
+                        bluetooth.onReading = { [weak store] reading in
                             store?.add(reading)
                         }
                     }
+                    if mqtt.onReading == nil {
+                        mqtt.onReading = { [weak store, weak bluetooth] reading in
+                            if bluetooth?.isConnected == true { return }
+                            store?.add(reading)
+                        }
+                    }
+                    bluetooth.start()
                     mqtt.connect()
                 }
                 .onChange(of: scenePhase) { _, phase in

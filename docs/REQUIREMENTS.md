@@ -10,7 +10,7 @@
 5. Support calibration session workflow
 
 ## Must-have (v0.1)
-- [ ] Connect to armband via BLE
+- [x] Connect to armband via BLE (GATT notify, same JSON as MQTT)
 - [ ] Parse and display: Heart Rate, SpO₂, Temperature, Motion, 940 nm value, Battery
 - [ ] Live multi-series graphs (Swift Charts)
 - [ ] Offline storage of every reading

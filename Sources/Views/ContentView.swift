@@ -8,6 +8,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var store: ReadingStore
     @EnvironmentObject var mqtt: MQTTClient
+    @EnvironmentObject var bluetooth: BluetoothManager
     @EnvironmentObject var syncEngine: SyncEngine
     
     var body: some View {
@@ -29,6 +30,7 @@ struct ContentView: View {
 
 struct SettingsView: View {
     @EnvironmentObject var mqtt: MQTTClient
+    @EnvironmentObject var bluetooth: BluetoothManager
     @EnvironmentObject var store: ReadingStore
     @EnvironmentObject var syncEngine: SyncEngine
     @State private var mqttUser = ""
@@ -56,6 +58,22 @@ struct SettingsView: View {
                 }
 
                 Section("Connection") {
+                    HStack {
+                        Text("Armband")
+                        Spacer()
+                        Circle()
+                            .fill(bluetooth.isConnected ? .green : .orange)
+                            .frame(width: 12, height: 12)
+                        Text(bluetooth.statusText)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    if let err = bluetooth.lastError {
+                        Text(err)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
                     HStack {
                         Text("MQTT")
                         Spacer()

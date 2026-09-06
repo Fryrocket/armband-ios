@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Armband talks to the XIAO over Bluetooth so readings sync to this phone without Wi-Fi.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Armband talks to the XIAO over Bluetooth so readings sync to this phone without Wi-Fi.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>ArmbandIOS needs local network access to talk to the Raspberry Pi and armband.</string>
 	<key>NSBonjourServices</key>

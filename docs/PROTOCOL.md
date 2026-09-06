@@ -43,4 +43,4 @@ Extracted from `armband-ppg-940nm/firmware/Armband_Full.ino` (2026-08).
 
 3. **Sync path**: Phone → Pi batch dump (MQTT topic `armband/ios/batch` or HTTP) when the Pi is reachable.
 
-The firmware currently only does MQTT. Adding a simple BLE characteristic that publishes the same JSON (or binary equivalent) is a future firmware enhancement.
+Firmware also advertises BLE `BGM-Armband` (service `C3A10000-8C3A-4B1E-9F2D-B6A0A1B2C3D4`, notify/read JSON char `C3A10001-…`). Same JSON as MQTT. Phone prefers BLE when connected so the band can sync without Wi-Fi.

@@ -12,6 +12,7 @@ import Charts
 struct DashboardView: View {
     @ObservedObject var store: ReadingStore
     @ObservedObject var syncEngine: SyncEngine
+    @EnvironmentObject var bluetooth: BluetoothManager
     
     private var latest: Reading? { store.readings.last }
     private var recent: ArraySlice<Reading> { store.readings.suffix(60) }
@@ -20,11 +21,21 @@ struct DashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    HStack {
-                        Label(store.pendingCount > 0 ? "\(store.pendingCount) pending" : "All synced",
-                              systemImage: store.pendingCount > 0 ? "icloud.and.arrow.up" : "checkmark.icloud")
-                            .foregroundStyle(store.pendingCount > 0 ? .orange : .green)
-                        Spacer()
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label(
+                            bluetooth.statusText,
+                            systemImage: bluetooth.isConnected ? "dot.radiowaves.left.and.right" : "slash.circle"
+                        )
+                        .foregroundStyle(bluetooth.isConnected ? Color.titleIvory : .orange)
+
+                        HStack {
+                            let piPending = store.pendingCount + store.pendingGlucoseCount
+                            Label(
+                                piPending > 0 ? "\(piPending) waiting for Pi dump" : "Pi dump queue empty",
+                                systemImage: piPending > 0 ? "icloud.and.arrow.up" : "internaldrive"
+                            )
+                            .foregroundStyle(piPending > 0 ? .orange : Color.titleIvory)
+                            Spacer()
                         if syncEngine.isSyncing {
                             Button("Cancel") {
                                 syncEngine.cancelDump()
@@ -39,6 +50,7 @@ struct DashboardView: View {
                             .buttonStyle(.borderedProminent)
                             .tint(Color.fireEngineRed)
                             .foregroundStyle(.white)
+                        }
                         }
                     }
                     .padding(.horizontal)
