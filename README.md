@@ -76,6 +76,7 @@ armband-ios/
 - [Sources/Views/ContentView.swift](Sources/Views/ContentView.swift) — tab shell + settings
 - [Sources/Views/DashboardView.swift](Sources/Views/DashboardView.swift) — metric cards + Swift Charts
 - [Sources/Views/SwiftUICompat.swift](Sources/Views/SwiftUICompat.swift)
+- [Sources/Views/Theme.swift](Sources/Views/Theme.swift)
 
 **Docs**
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
