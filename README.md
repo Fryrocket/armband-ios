@@ -70,6 +70,8 @@ armband-ios/
 - [Sources/Models/NextReadingCountdown.swift](Sources/Models/NextReadingCountdown.swift)
 - [Sources/Models/Reading.swift](Sources/Models/Reading.swift) — data model + firmware JSON parser
 - [Sources/Models/SubjectID.swift](Sources/Models/SubjectID.swift)
+- [Sources/Networking/ArmbandBLE.swift](Sources/Networking/ArmbandBLE.swift)
+- [Sources/Networking/BluetoothManager.swift](Sources/Networking/BluetoothManager.swift)
 - [Sources/Networking/MQTTClient.swift](Sources/Networking/MQTTClient.swift) — CocoaMQTT wrapper, delegate proxy
 - [Sources/Store/DeviceIdentity.swift](Sources/Store/DeviceIdentity.swift) — stable per-install device id
 - [Sources/Store/KeychainStore.swift](Sources/Store/KeychainStore.swift)
