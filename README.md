@@ -63,6 +63,7 @@ armband-ios/
 
 **Sources**
 - [Sources/App/ArmbandIOSApp.swift](Sources/App/ArmbandIOSApp.swift) — app entry, dependency wiring, scene-phase flush
+- [Sources/Models/NextReadingCountdown.swift](Sources/Models/NextReadingCountdown.swift)
 - [Sources/Models/Reading.swift](Sources/Models/Reading.swift) — data model + firmware JSON parser
 - [Sources/Models/SubjectID.swift](Sources/Models/SubjectID.swift)
 - [Sources/Networking/MQTTClient.swift](Sources/Networking/MQTTClient.swift) — CocoaMQTT wrapper, delegate proxy
@@ -109,6 +110,7 @@ armband-ios/
 - [Tests/KeychainStoreTests.swift](Tests/KeychainStoreTests.swift)
 - [Tests/MQTTCredentialsTests.swift](Tests/MQTTCredentialsTests.swift)
 - [Tests/MQTTHostTests.swift](Tests/MQTTHostTests.swift)
+- [Tests/NextReadingCountdownTests.swift](Tests/NextReadingCountdownTests.swift)
 - [Tests/SubjectIDTests.swift](Tests/SubjectIDTests.swift)
 - [Tests/TemperatureTests.swift](Tests/TemperatureTests.swift)
 
