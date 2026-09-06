@@ -44,7 +44,13 @@ struct DashboardView: View {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         MetricCard(title: "Heart Rate", value: latest?.bpm.map { "\($0)" } ?? "--", unit: "bpm")
                         MetricCard(title: "SpO2", value: latest?.spo2.map { "\($0)" } ?? "--", unit: "%")
-                        MetricCard(title: "Temp", value: latest?.temperature.map { String(format: "%.1f", $0) } ?? "--", unit: "C")
+                        MetricCard(
+                            title: "Temp",
+                            value: latest?.temperature.map { String(format: "%.1f", $0) } ?? "--",
+                            unit: "°C",
+                            secondaryValue: latest?.temperatureFahrenheit.map { String(format: "%.1f", $0) },
+                            secondaryUnit: "°F"
+                        )
                         MetricCard(title: "Battery", value: latest.map { String(format: "%.2f", $0.batteryVoltage) } ?? "--", unit: "V")
                         MetricCard(title: "940 nm", value: latest.map { String(format: "%.0f", $0.filt940) } ?? "--", unit: "")
                         MetricCard(title: "Motion", value: latest.map { String(format: "%.1f", $0.motion) } ?? "--",
@@ -126,6 +132,8 @@ struct MetricCard: View {
     let title: String
     let value: String
     let unit: String
+    var secondaryValue: String? = nil
+    var secondaryUnit: String? = nil
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -138,6 +146,15 @@ struct MetricCard: View {
                 Text(unit)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            if let secondaryValue, let secondaryUnit {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(secondaryValue)
+                        .font(.title3.bold())
+                    Text(secondaryUnit)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

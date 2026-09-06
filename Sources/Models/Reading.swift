@@ -27,6 +27,11 @@ struct Reading: Identifiable, Codable, Equatable {
     var subjectId: String?
     var synced: Bool
     var source: String
+
+    /// Firmware `temp` is °C. Display-only; dump JSON stays Celsius.
+    var temperatureFahrenheit: Double? {
+        temperature.map { $0 * 9.0 / 5.0 + 32.0 }
+    }
     
     init(
         id: UUID = UUID(),
