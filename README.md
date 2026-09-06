@@ -63,6 +63,9 @@ armband-ios/
 
 **Sources**
 - [Sources/App/ArmbandIOSApp.swift](Sources/App/ArmbandIOSApp.swift) — app entry, dependency wiring, scene-phase flush
+- [Sources/Assets.xcassets/Contents.json](Sources/Assets.xcassets/Contents.json)
+- [Sources/Assets.xcassets/ForestBackground.imageset/Contents.json](Sources/Assets.xcassets/ForestBackground.imageset/Contents.json)
+- [Sources/Assets.xcassets/ForestBackground.imageset/ForestBackground.jpg](Sources/Assets.xcassets/ForestBackground.imageset/ForestBackground.jpg)
 - [Sources/Models/NextReadingCountdown.swift](Sources/Models/NextReadingCountdown.swift)
 - [Sources/Models/Reading.swift](Sources/Models/Reading.swift) — data model + firmware JSON parser
 - [Sources/Models/SubjectID.swift](Sources/Models/SubjectID.swift)
