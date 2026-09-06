@@ -110,6 +110,7 @@ armband-ios/
 - [Tests/MQTTCredentialsTests.swift](Tests/MQTTCredentialsTests.swift)
 - [Tests/MQTTHostTests.swift](Tests/MQTTHostTests.swift)
 - [Tests/SubjectIDTests.swift](Tests/SubjectIDTests.swift)
+- [Tests/TemperatureTests.swift](Tests/TemperatureTests.swift)
 
 ## Connection strategy
 
