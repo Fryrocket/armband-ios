@@ -15,7 +15,9 @@ import UIKit
 @MainActor
 final class ReadingStore: ObservableObject {
     @Published private(set) var readings: [Reading] = []
+    @Published private(set) var glucoseRefs: [GlucoseRef] = []
     @Published private(set) var pendingCount: Int = 0
+    @Published private(set) var pendingGlucoseCount: Int = 0
     @Published var currentSessionId: UUID?
     /// Closed Subject_ID from Settings. Nil until the operator picks one.
     /// Persisted in UserDefaults (`SubjectID.defaultsKey`). Re-seat does not
@@ -28,6 +30,7 @@ final class ReadingStore: ObservableObject {
     
     private let maxReadings = 5_000
     private let fileURL: URL
+    private let glucoseFileURL: URL
     private var saveTask: Task<Void, Never>?
     private let saveDebounceNs: UInt64 = 400_000_000
     private let saveQueue = DispatchQueue(label: "com.fryrocket.armband.readings.save")
@@ -35,7 +38,9 @@ final class ReadingStore: ObservableObject {
     init() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         fileURL = docs.appendingPathComponent("readings.json")
+        glucoseFileURL = docs.appendingPathComponent("glucose_refs.json")
         load()
+        loadGlucoseRefs()
         loadSubjectId()
     }
 
@@ -61,6 +66,37 @@ final class ReadingStore: ObservableObject {
     
     func startSession() { currentSessionId = UUID() }
     func stopSession() { currentSessionId = nil }
+
+    @discardableResult
+    func addGlucose(kind: GlucoseKind, mgdl: Double) -> GlucoseRef {
+        let ref = GlucoseRef(
+            kind: kind,
+            mgdl: mgdl,
+            sessionId: currentSessionId,
+            subjectId: currentSubjectId
+        )
+        glucoseRefs.append(ref)
+        pendingGlucoseCount += 1
+        saveGlucoseNow()
+        return ref
+    }
+
+    func unsyncedGlucoseRefs() -> [GlucoseRef] {
+        glucoseRefs.filter { !$0.synced }
+    }
+
+    func markGlucoseSynced(ids: [UUID]) {
+        let idSet = Set(ids)
+        var newly = 0
+        for i in glucoseRefs.indices {
+            if idSet.contains(glucoseRefs[i].id), !glucoseRefs[i].synced {
+                glucoseRefs[i].synced = true
+                newly += 1
+            }
+        }
+        pendingGlucoseCount = max(0, pendingGlucoseCount - newly)
+        saveGlucoseNow()
+    }
 
     private func loadSubjectId() {
         let stored = UserDefaults.standard.string(forKey: SubjectID.defaultsKey)
@@ -170,6 +206,30 @@ final class ReadingStore: ObservableObject {
             enforceCap()
         } catch {
             print("ReadingStore load error: \(error)")
+        }
+    }
+
+    private func saveGlucoseNow() {
+        let snapshot = glucoseRefs
+        let url = glucoseFileURL
+        saveQueue.async {
+            do {
+                let data = try JSONEncoder().encode(snapshot)
+                try data.write(to: url, options: .atomic)
+            } catch {
+                print("ReadingStore glucose save error: \(error)")
+            }
+        }
+    }
+
+    private func loadGlucoseRefs() {
+        guard FileManager.default.fileExists(atPath: glucoseFileURL.path) else { return }
+        do {
+            let data = try Data(contentsOf: glucoseFileURL)
+            glucoseRefs = try JSONDecoder().decode([GlucoseRef].self, from: data)
+            pendingGlucoseCount = glucoseRefs.reduce(0) { $0 + ($1.synced ? 0 : 1) }
+        } catch {
+            print("ReadingStore glucose load error: \(error)")
         }
     }
 }

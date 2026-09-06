@@ -31,6 +31,18 @@ Top-level (always):
 | `readings` | array | see below |
 | `session_id` | string UUID, optional | `store.currentSessionId` if a session is open |
 | `subject_id` | string, optional | Closed enum `SUBJ_A` / `SUBJ_B`. Omitted when unset. |
+| `glucose_refs` | array, optional | Manual Libre / finger-stick refs queued on the phone. Omitted when empty. |
+
+Each `glucose_refs` item:
+
+| Field | Type | Notes |
+|-------|------|--------|
+| `id` | UUID string | |
+| `ts` | ISO-8601 fractional | When the operator tapped Add |
+| `kind` | string | `"libre"` or `"fingerstick"` |
+| `mgdl` | number | mg/dL |
+| `session_id` | UUID string, optional | |
+| `subject_id` | string, optional | |
 
 Per reading (always):
 

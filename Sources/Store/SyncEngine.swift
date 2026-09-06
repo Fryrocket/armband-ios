@@ -104,7 +104,8 @@ final class SyncEngine: ObservableObject {
             }
 
             let batch = store.unsyncedBatch(limit: batchLimit)
-            guard !batch.isEmpty else { break }
+            let glucosePending = store.unsyncedGlucoseRefs()
+            if batch.isEmpty && glucosePending.isEmpty { break }
 
             if let head = batch.first?.id, head == previousHeadId {
                 lastError = "Sync stalled: same batch returned after ACK - store did not mark synced"
@@ -120,8 +121,12 @@ final class SyncEngine: ObservableObject {
                 }
             }
 
-            if ok { totalSynced += batch.count }
+            if ok {
+                totalSynced += batch.count
+                if !glucosePending.isEmpty { totalSynced += glucosePending.count }
+            }
             if !ok || Task.isCancelled { break }
+            if batch.isEmpty { break }
             try? await Task.sleep(nanoseconds: 50_000_000)
         }
 
@@ -166,6 +171,21 @@ final class SyncEngine: ObservableObject {
         }
         if let subj = store.currentSubjectId {
             payload["subject_id"] = subj
+        }
+
+        let glucose = store.unsyncedGlucoseRefs()
+        if !glucose.isEmpty {
+            payload["glucose_refs"] = glucose.map { ref -> [String: Any] in
+                var dict: [String: Any] = [
+                    "id": ref.id.uuidString,
+                    "ts": Self.isoFormatter.string(from: ref.timestamp),
+                    "kind": ref.kind.rawValue,
+                    "mgdl": ref.mgdl
+                ]
+                if let sid = ref.sessionId { dict["session_id"] = sid.uuidString }
+                if let subj = ref.subjectId { dict["subject_id"] = subj }
+                return dict
+            }
         }
 
         let data: Data
@@ -226,6 +246,9 @@ final class SyncEngine: ObservableObject {
             }
         }
 
+        if ok, !glucose.isEmpty {
+            store.markGlucoseSynced(ids: glucose.map(\.id))
+        }
         return ok
     }
 

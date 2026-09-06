@@ -29,7 +29,7 @@
 
 ## Nice-to-have (later)
 - [ ] Apple Watch support
-- [ ] Enter Libre / fingerstick reference values in-app
+- [x] Enter Libre / fingerstick reference values in-app (queued, sent on Dump to Pi)
 - [ ] Push notifications for disconnect or large backlog cleared
 - [ ] Simple historical day/week view
 

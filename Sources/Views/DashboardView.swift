@@ -73,8 +73,14 @@ struct DashboardView: View {
                     )
                     .padding(.horizontal)
 
-                    UploadStatusCard(syncEngine: syncEngine, pendingCount: store.pendingCount)
+                    GlucoseEntryCard(store: store)
                         .padding(.horizontal)
+
+                    UploadStatusCard(
+                        syncEngine: syncEngine,
+                        pendingCount: store.pendingCount + store.pendingGlucoseCount
+                    )
+                    .padding(.horizontal)
                     
                     chartCard(title: "Heart Rate (bpm)") {
                         Chart {
@@ -190,6 +196,67 @@ struct Filt940Card: View {
         .padding()
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+struct GlucoseEntryCard: View {
+    @ObservedObject var store: ReadingStore
+    @State private var libreText = ""
+    @State private var fingerText = ""
+    @State private var status: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Reference glucose")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("Goes out with the next Dump to Pi. mg/dL.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            glucoseRow(title: "FreeStyle Libre", text: $libreText, kind: .libre)
+            glucoseRow(title: "Finger poke", text: $fingerText, kind: .fingerstick)
+
+            if let status {
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if store.pendingGlucoseCount > 0 {
+                Text("\(store.pendingGlucoseCount) waiting for dump")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func glucoseRow(title: String, text: Binding<String>, kind: GlucoseKind) -> some View {
+        HStack(spacing: 8) {
+            TextField(title, text: text)
+                .keyboardType(.decimalPad)
+                .textFieldStyle(.roundedBorder)
+            Button("Add") {
+                add(kind: kind, text: text)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.forestGreen)
+            .foregroundStyle(Color.titleIvory)
+        }
+    }
+
+    private func add(kind: GlucoseKind, text: Binding<String>) {
+        guard let mgdl = GlucoseRef.parseMgdl(text.wrappedValue) else {
+            status = "Enter a number like 102 or 102.4"
+            return
+        }
+        store.addGlucose(kind: kind, mgdl: mgdl)
+        let label = kind == .libre ? "Libre" : "Finger poke"
+        status = "\(label) \(String(format: "%.1f", mgdl)) mg/dL queued"
+        text.wrappedValue = ""
     }
 }
 
