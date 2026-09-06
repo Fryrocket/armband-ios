@@ -9,28 +9,88 @@ extension Color {
     static let fireEngineRed = Color(red: 206 / 255, green: 32 / 255, blue: 41 / 255)
 }
 
+struct ForestBackdrop: View {
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.forestGreen
+            Image("ForestBackground")
+                .resizable()
+                .scaledToFill()
+                .opacity(0.55)
+            Color.forestGreen.opacity(0.45)
+            PineSilhouette()
+                .fill(Color.black.opacity(0.35))
+                .frame(height: 220)
+                .allowsHitTesting(false)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+/// Simple pine-tree skyline so the nature motif remains if the photo is dimmed.
+struct PineSilhouette: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: 0, y: rect.maxY))
+        let trees: [(peakX: CGFloat, peakY: CGFloat, halfW: CGFloat)] = [
+            (0.06, 0.42, 0.10),
+            (0.18, 0.18, 0.14),
+            (0.32, 0.38, 0.11),
+            (0.46, 0.12, 0.16),
+            (0.62, 0.28, 0.13),
+            (0.76, 0.16, 0.15),
+            (0.90, 0.36, 0.12),
+            (1.02, 0.48, 0.10),
+        ]
+        for t in trees {
+            let cx = rect.width * t.peakX
+            let top = rect.height * t.peakY
+            let hw = rect.width * t.halfW
+            path.addLine(to: CGPoint(x: cx - hw, y: rect.maxY))
+            path.addLine(to: CGPoint(x: cx, y: top))
+            path.addLine(to: CGPoint(x: cx + hw, y: rect.maxY))
+        }
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
 extension View {
     func forestGreenScreen() -> some View {
+        #if os(iOS)
         self
             .scrollContentBackground(.hidden)
-            .background(Color.forestGreen.ignoresSafeArea())
-            .toolbarBackground(Color.forestGreen, for: .navigationBar)
+            .background { ForestBackdrop() }
+            .toolbarBackground(Color.forestGreen.opacity(0.92), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarBackground(Color.forestGreen, for: .tabBar)
+            .toolbarBackground(Color.forestGreen.opacity(0.92), for: .tabBar)
             .toolbarBackground(.visible, for: .tabBar)
             .toolbarColorScheme(.dark, for: .navigationBar, .tabBar)
+        #else
+        self.background { ForestBackdrop() }
+        #endif
     }
 
     func professionalNavTitle(_ title: String) -> some View {
-        self
+        let titleView = Text(title)
+            .font(.system(size: 24, weight: .semibold, design: .serif))
+            .tracking(1.6)
+            .foregroundStyle(Color.titleIvory)
+        #if os(iOS)
+        return self
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text(title)
-                        .font(.system(.title3, design: .serif).weight(.semibold))
-                        .tracking(1.4)
-                        .foregroundStyle(Color.titleIvory)
+                    titleView
                 }
             }
+        #else
+        return self.toolbar {
+            ToolbarItem(placement: .principal) {
+                titleView
+            }
+        }
+        #endif
     }
 }

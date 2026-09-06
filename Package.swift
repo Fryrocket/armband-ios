@@ -45,7 +45,7 @@ let package = Package(
                 .product(name: "CocoaMQTT", package: "CocoaMQTT"),
             ],
             path: "Sources",
-            exclude: ["App"]
+            exclude: ["App", "Assets.xcassets"]
         ),
         .testTarget(
             name: "ArmbandIOSTests",
