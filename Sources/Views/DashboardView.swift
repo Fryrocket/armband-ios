@@ -48,6 +48,7 @@ struct DashboardView: View {
                         MetricCard(title: "Heart Rate", value: latest?.bpm.map { "\($0)" } ?? "--", unit: "bpm")
                         MetricCard(title: "SpO2", value: latest?.spo2.map { "\($0)" } ?? "--", unit: "%")
                         MetricCard(title: "Battery", value: latest.map { String(format: "%.2f", $0.batteryVoltage) } ?? "--", unit: "V")
+                        ClockDateCard()
                     }
                     .padding(.horizontal)
 
@@ -141,6 +142,28 @@ struct DashboardView: View {
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal)
+    }
+}
+
+struct ClockDateCard: View {
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Clock")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(context.date.formatted(date: .omitted, time: .shortened))
+                    .font(.title2.bold())
+                    .monospacedDigit()
+                Text(context.date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().year()))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
     }
 }
 
