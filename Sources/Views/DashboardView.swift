@@ -41,17 +41,17 @@ struct DashboardView: View {
                     }
                     .padding(.horizontal)
                     
-                    DualTempCard(
-                        celsius: latest?.temperature,
-                        fahrenheit: latest?.temperatureFahrenheit
-                    )
-                    .padding(.horizontal)
+                    Filt940Card(value: latest?.filt940)
+                        .padding(.horizontal)
 
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         MetricCard(title: "Heart Rate", value: latest?.bpm.map { "\($0)" } ?? "--", unit: "bpm")
                         MetricCard(title: "SpO2", value: latest?.spo2.map { "\($0)" } ?? "--", unit: "%")
                         MetricCard(title: "Battery", value: latest.map { String(format: "%.2f", $0.batteryVoltage) } ?? "--", unit: "V")
-                        MetricCard(title: "940 nm", value: latest.map { String(format: "%.0f", $0.filt940) } ?? "--", unit: "")
+                    }
+                    .padding(.horizontal)
+
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         MetricCard(title: "Motion", value: latest.map { String(format: "%.1f", $0.motion) } ?? "--",
                                    unit: latest?.isMoving == true ? "MOV" : "still")
                         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -62,6 +62,12 @@ struct DashboardView: View {
                             MetricCard(title: "Next reading", value: tick.value, unit: tick.unit)
                         }
                     }
+                    .padding(.horizontal)
+
+                    DualTempCard(
+                        celsius: latest?.temperature,
+                        fahrenheit: latest?.temperatureFahrenheit
+                    )
                     .padding(.horizontal)
 
                     UploadStatusCard(syncEngine: syncEngine, pendingCount: store.pendingCount)
@@ -134,6 +140,30 @@ struct DashboardView: View {
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal)
+    }
+}
+
+struct Filt940Card: View {
+    let value: Double?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("940 nm")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(value.map { String(format: "%.0f", $0) } ?? "--")
+                    .font(.title.bold())
+                    .monospacedDigit()
+                Text("filt")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
