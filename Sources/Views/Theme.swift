@@ -5,6 +5,8 @@ extension Color {
     static let forestGreen = Color(red: 27 / 255, green: 67 / 255, blue: 50 / 255)
     /// Warm ivory for titles on forest green (#F3E9D7).
     static let titleIvory = Color(red: 243 / 255, green: 233 / 255, blue: 215 / 255)
+    /// Fire-engine red (#CE2029).
+    static let fireEngineRed = Color(red: 206 / 255, green: 32 / 255, blue: 41 / 255)
 }
 
 extension View {

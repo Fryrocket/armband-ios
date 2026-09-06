@@ -140,6 +140,9 @@ struct SettingsView: View {
                         Button("Dump to Pi now") {
                             syncEngine.startDump()
                         }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.fireEngineRed)
+                        .foregroundStyle(.white)
                         .disabled(store.pendingCount == 0)
                     }
                 }

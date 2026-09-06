@@ -37,6 +37,8 @@ struct DashboardView: View {
                                 syncEngine.startDump()
                             }
                             .buttonStyle(.borderedProminent)
+                            .tint(Color.fireEngineRed)
+                            .foregroundStyle(.white)
                         }
                     }
                     .padding(.horizontal)
