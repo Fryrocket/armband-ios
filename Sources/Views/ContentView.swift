@@ -22,6 +22,8 @@ struct ContentView: View {
                     Label("Settings", systemImage: "gearshape")
                 }
         }
+        .tint(.white)
+        .hunterGreenScreen()
     }
 }
 
@@ -156,6 +158,7 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .hunterGreenScreen()
             .onAppear {
                 let loaded = MQTTCredentials.load()
                 mqttUser = loaded.username

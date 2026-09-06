@@ -124,6 +124,7 @@ struct DashboardView: View {
                 .padding(.vertical)
             }
             .navigationTitle("BGM Armband")
+            .hunterGreenScreen()
         }
     }
     
