@@ -284,6 +284,7 @@
 				INFOPLIST_FILE = ArmbandIOS/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Armband;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Armband talks to the XIAO over Bluetooth so readings sync to this phone without Wi-Fi.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Armband needs local network access to dump readings to the Raspberry Pi.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -315,6 +316,7 @@
 				INFOPLIST_FILE = ArmbandIOS/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Armband;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Armband talks to the XIAO over Bluetooth so readings sync to this phone without Wi-Fi.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Armband needs local network access to dump readings to the Raspberry Pi.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

@@ -3,7 +3,7 @@
 //  ArmbandIOS
 //
 //  Main live view with metrics cards + Swift Charts.
-//  BPM and 940 nm use separate charts / independent y-domains.
+//  BPM, 940 nm, and glucose use separate charts / independent y-domains.
 //
 
 import SwiftUI
@@ -13,9 +13,13 @@ struct DashboardView: View {
     @ObservedObject var store: ReadingStore
     @ObservedObject var syncEngine: SyncEngine
     @EnvironmentObject var bluetooth: BluetoothManager
+    @EnvironmentObject var mqtt: MQTTClient
+    @ObservedObject private var lanGate = LocalNetworkGate.shared
     
-    private var latest: Reading? { store.readings.last }
-    private var recent: ArraySlice<Reading> { store.readings.suffix(60) }
+    private var latest: Reading? { store.latestLive ?? store.readings.last }
+    private var recent: [Reading] {
+        store.liveRecent.isEmpty ? Array(store.readings.suffix(60)) : store.liveRecent
+    }
     
     var body: some View {
         NavigationStack {
@@ -27,6 +31,37 @@ struct DashboardView: View {
                             systemImage: bluetooth.isConnected ? "dot.radiowaves.left.and.right" : "slash.circle"
                         )
                         .foregroundStyle(bluetooth.isConnected ? Color.titleIvory : .orange)
+
+                        HStack {
+                            Label(
+                                mqtt.isConnected
+                                    ? "Pi MQTT connected"
+                                    : (mqtt.isConnecting ? "Pi MQTT connecting…" : "Pi MQTT disconnected"),
+                                systemImage: mqtt.isConnected ? "externaldrive.connected.to.line.below" : "externaldrive.badge.xmark"
+                            )
+                            .foregroundStyle(mqtt.isConnected ? Color.titleIvory : .orange)
+                            Spacer()
+                            if !mqtt.isConnected {
+                                Button("Reconnect") {
+                                    mqtt.connect()
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(Color.titleIvory)
+                            }
+                        }
+                        Text("Broker \(mqtt.host):\(mqtt.port)\(mqtt.viaLabel.isEmpty ? "" : " · \(mqtt.viaLabel)")")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        if !lanGate.statusText.isEmpty {
+                            Text(lanGate.statusText)
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                        if let err = syncEngine.lastError ?? mqtt.lastError {
+                            Text(err)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
 
                         HStack {
                             let piPending = store.pendingCount + store.pendingGlucoseCount
@@ -44,7 +79,7 @@ struct DashboardView: View {
                             .tint(.red)
                             ProgressView()
                         } else {
-                            Button("Dump to Pi") {
+                            Button("Dump to IRIS") {
                                 syncEngine.startDump()
                             }
                             .buttonStyle(.borderedProminent)
@@ -55,12 +90,14 @@ struct DashboardView: View {
                     }
                     .padding(.horizontal)
                     
-                    Filt940Card(value: latest?.filt940)
-                        .padding(.horizontal)
-
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         ClockDateCard()
-                        MetricCard(title: "Battery", value: latest.map { String(format: "%.2f", $0.batteryVoltage) } ?? "--", unit: "V")
+                        BatteryCard(volts: latest?.batteryVoltage)
+                        GlucoseLiveCard(
+                            filt940: latest?.filt940,
+                            lastRef: store.glucoseRefs.last
+                        )
+                        Filt940Card(value: latest?.filt940)
                         MetricCard(title: "SpO2", value: latest?.spo2.map { "\($0)" } ?? "--", unit: "%")
                         MetricCard(title: "Heart Rate", value: latest?.bpm.map { "\($0)" } ?? "--", unit: "bpm")
                     }
@@ -71,7 +108,7 @@ struct DashboardView: View {
                                    unit: latest?.isMoving == true ? "MOV" : "still")
                         TimelineView(.periodic(from: .now, by: 1)) { context in
                             let tick = NextReadingCountdown.display(
-                                lastReading: latest?.timestamp,
+                                anchor: store.nextReadingAnchor,
                                 now: context.date
                             )
                             MetricCard(title: "Next reading", value: tick.value, unit: tick.unit)
@@ -125,6 +162,31 @@ struct DashboardView: View {
                         .chartYScale(domain: .automatic(includesZero: false))
                         .frame(height: 160)
                     }
+
+                    chartCard(title: "Glucose (mg/dL)") {
+                        Chart {
+                            ForEach(Array(recent)) { r in
+                                if let g = r.estimatedGlucoseMgdl {
+                                    LineMark(
+                                        x: .value("Time", r.timestamp),
+                                        y: .value("Glucose", g)
+                                    )
+                                    .foregroundStyle(.orange)
+                                    .interpolationMethod(.catmullRom)
+                                }
+                            }
+                            ForEach(store.glucoseRefs) { ref in
+                                PointMark(
+                                    x: .value("Time", ref.timestamp),
+                                    y: .value("Glucose", ref.mgdl)
+                                )
+                                .foregroundStyle(ref.kind == .libre ? Color.titleIvory : .orange)
+                                .symbolSize(60)
+                            }
+                        }
+                        .chartYScale(domain: .automatic(includesZero: false))
+                        .frame(height: 160)
+                    }
                     
                     HStack {
                         if store.currentSessionId == nil {
@@ -165,6 +227,34 @@ struct DashboardView: View {
     }
 }
 
+struct BatteryCard: View {
+    let volts: Double?
+
+    var body: some View {
+        let tick = BatteryEstimate.display(volts: volts)
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Battery")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(tick.volts)
+                    .font(.title2.bold())
+                    .monospacedDigit()
+                Text(tick.unit)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text(tick.detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
 struct ClockDateCard: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -187,6 +277,35 @@ struct ClockDateCard: View {
     }
 }
 
+struct GlucoseLiveCard: View {
+    let filt940: Double?
+    let lastRef: GlucoseRef?
+
+    var body: some View {
+        let tick = GlucoseFrom940.display(filt940: filt940, lastRef: lastRef)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Glucose")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(tick.value)
+                    .font(.title.bold())
+                    .monospacedDigit()
+                Text(tick.unit)
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+            }
+            Text(tick.caption)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
 struct Filt940Card: View {
     let value: Double?
 
@@ -203,6 +322,9 @@ struct Filt940Card: View {
                     .font(.headline)
                     .foregroundStyle(.secondary)
             }
+            Text("→ glucose later")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
@@ -222,7 +344,7 @@ struct GlucoseEntryCard: View {
             Text("Reference glucose")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text("Goes out with the next Dump to Pi. mg/dL.")
+            Text("Goes out with the next Dump to IRIS. mg/dL.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
@@ -346,7 +468,7 @@ struct UploadStatusCard: View {
 
     private var subtitle: String {
         if syncEngine.isSyncing {
-            return pendingCount > 0 ? "\(pendingCount) pending" : "Sending to Pi"
+            return pendingCount > 0 ? "\(pendingCount) pending" : "Sending to IRIS"
         }
         if let err = syncEngine.lastError { return err }
         if let t = syncEngine.lastSyncTime {
@@ -356,7 +478,7 @@ struct UploadStatusCard: View {
             return when
         }
         if pendingCount > 0 { return "\(pendingCount) waiting to dump" }
-        return "Dump to Pi when you have readings"
+        return "Dump to IRIS when you have readings"
     }
 
     private var iconName: String {

@@ -89,9 +89,17 @@ final class SyncEngine: ObservableObject {
         lastError = nil
         defer { isSyncing = false }
 
-        guard let mqtt, mqtt.isConnected else {
+        guard let mqtt else {
             lastError = "Pi not reachable (MQTT disconnected)"
             return
+        }
+        if !mqtt.isConnected {
+            let ok = await mqtt.waitUntilConnected()
+            if !ok {
+                lastError = mqtt.lastError
+                    ?? "Pi not reachable (MQTT disconnected). Phone must be on this Wi-Fi; allow Local Network for Armband."
+                return
+            }
         }
 
         var totalSynced = 0
@@ -126,7 +134,6 @@ final class SyncEngine: ObservableObject {
                 if !glucosePending.isEmpty { totalSynced += glucosePending.count }
             }
             if !ok || Task.isCancelled { break }
-            if batch.isEmpty { break }
             try? await Task.sleep(nanoseconds: 50_000_000)
         }
 
@@ -264,7 +271,8 @@ final class SyncEngine: ObservableObject {
 
         guard let ids = pendingAcks[batchId] else { return }
 
-        let accounted = inserted + duplicates
+        // Pi ACK with status ok and no counts: treat the whole batch as settled.
+        let accounted = inserted < 0 ? ids.count : inserted + duplicates
         guard accounted >= ids.count else {
             noteFailedInsert(head: ids.first)
             let detail = duplicates > 0

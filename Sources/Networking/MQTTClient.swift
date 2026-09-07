@@ -27,16 +27,20 @@ import CocoaMQTT
 final class MQTTClient: ObservableObject {
 
     @Published var isConnected = false
+    @Published var isConnecting = false
     @Published var lastError: String?
     @Published var lastMessage: String?
+    @Published private(set) var viaLabel = ""
 
     var publishesEveryMessage = false
 
     private var client: AnyObject?
     private var delegateProxy: AnyObject?
-    private var isConnecting = false
     private var connectTimeoutTask: Task<Void, Never>?
     private var disconnectSignalled = true
+    private var targets: [MQTTTarget] = []
+    private var targetIndex = 0
+    private var failoverEnabled = false
 
     private(set) var host: String
     private(set) var port: UInt16
@@ -82,8 +86,40 @@ final class MQTTClient: ObservableObject {
 
     func connect() {
         guard !isConnected && !isConnecting else { return }
+        failoverEnabled = true
+        let path = NetworkPath.shared
+        targets = MQTTHost.targets(wifi: path.isWifi, cellular: path.isCellular)
+        targetIndex = 0
         isConnecting = true
-        lastError = nil
+        startCurrentTarget()
+    }
+
+    private func startCurrentTarget() {
+        guard failoverEnabled else { return }
+        guard targetIndex < targets.count else {
+            isConnecting = false
+            if lastError == nil || lastError?.hasPrefix("Connecting") == true || lastError?.hasPrefix("Timeout") == true {
+                lastError = "Could not reach IRIS on LAN or cellular. Off-LAN needs MQTT user/pass in Settings."
+            }
+            return
+        }
+        let t = targets[targetIndex]
+        host = t.host
+        port = t.port
+        viaLabel = t.label
+        lastError = "Connecting to \(t.host):\(t.port) (\(t.label))…"
+
+        var creds = MQTTAuth.wireCredentials(username: username, password: password)
+        if t.requireAuth, creds.username == nil || creds.password == nil {
+            lastError = "Off-LAN dump needs MQTT user/pass in Settings"
+            targetIndex += 1
+            startCurrentTarget()
+            return
+        }
+        if !t.requireAuth {
+            // House LAN allows anonymous. Don't send a stale Keychain login.
+            creds = (nil, nil)
+        }
 
         #if canImport(CocoaMQTT)
         if let old = client as? CocoaMQTT {
@@ -92,30 +128,39 @@ final class MQTTClient: ObservableObject {
         }
         delegateProxy = nil
 
-        let mqtt = CocoaMQTT(clientID: clientID, host: host, port: port)
-        mqtt.username = username
-        mqtt.password = password
+        let mqtt = CocoaMQTT(clientID: clientID, host: t.host, port: t.port)
+        mqtt.username = creds.username
+        mqtt.password = creds.password
         mqtt.keepAlive = 60
-        mqtt.autoReconnect = true
-        mqtt.cleanSession = false
+        mqtt.autoReconnect = false
+        mqtt.cleanSession = true
+        mqtt.enableSSL = false
 
         let proxy = MQTTDelegateProxy(owner: self)
         self.delegateProxy = proxy
         mqtt.delegate = proxy
-        mqtt.connect()
         self.client = mqtt
+        let started = mqtt.connect()
+        if !started {
+            lastError = "MQTT socket failed to start (\(t.host):\(t.port))"
+            targetIndex += 1
+            startCurrentTarget()
+            return
+        }
 
         connectTimeoutTask?.cancel()
+        let ns: UInt64 = targetIndex < targets.count - 1 ? 4_000_000_000 : 12_000_000_000
         connectTimeoutTask = Task { [weak self] in
             do {
-                try await Task.sleep(nanoseconds: 12_000_000_000)
+                try await Task.sleep(nanoseconds: ns)
             } catch {
                 return
             }
             await MainActor.run {
-                guard let self, self.isConnecting, !self.isConnected else { return }
-                self.isConnecting = false
-                self.lastError = "Connect timeout - check Pi IP / network"
+                guard let self, self.failoverEnabled, self.isConnecting, !self.isConnected else { return }
+                self.lastError = "Timeout \(t.host):\(t.port) (\(t.label))"
+                self.targetIndex += 1
+                self.startCurrentTarget()
             }
         }
         #else
@@ -124,7 +169,15 @@ final class MQTTClient: ObservableObject {
         #endif
     }
 
+    private func failOverAfterConnectFailure() {
+        guard failoverEnabled, isConnecting, !isConnected else { return }
+        connectTimeoutTask?.cancel()
+        targetIndex += 1
+        startCurrentTarget()
+    }
+
     func disconnect() {
+        failoverEnabled = false
         connectTimeoutTask?.cancel()
         connectTimeoutTask = nil
         #if canImport(CocoaMQTT)
@@ -173,9 +226,10 @@ final class MQTTClient: ObservableObject {
                   let batchId = json["batch_id"] as? String else { return }
 
             let status = (json["status"] as? String) ?? "ok"
-            let inserted = (json["inserted"] as? Int) ?? 0
-            let duplicates = (json["duplicates"] as? Int)
-                ?? (json["ignored"] as? Int)
+            // JSON numbers often arrive as NSNumber; missing counts: -1 (status ok → full success).
+            let inserted = Self.jsonInt(json, "inserted") ?? -1
+            let duplicates = Self.jsonInt(json, "duplicates")
+                ?? Self.jsonInt(json, "ignored")
                 ?? 0
 
             if status == "ok" {
@@ -184,10 +238,55 @@ final class MQTTClient: ObservableObject {
                 let reason = (json["error"] as? String)
                     ?? (json["message"] as? String)
                     ?? status
-                onBatchAck?(batchId, inserted, duplicates, reason)
+                onBatchAck?(batchId, max(inserted, 0), duplicates, reason)
             }
         }
     }
+
+    private static func jsonInt(_ json: [String: Any], _ key: String) -> Int? {
+        if let i = json[key] as? Int { return i }
+        if let n = json[key] as? NSNumber { return n.intValue }
+        if let s = json[key] as? String, let i = Int(s) { return i }
+        return nil
+    }
+
+    func waitUntilConnected(timeout: TimeInterval = 20) async -> Bool {
+        if isConnected { return true }
+        connect()
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if isConnected { return true }
+            if Task.isCancelled { return false }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        return isConnected
+    }
+
+    #if canImport(CocoaMQTT)
+    fileprivate func handleConnectAck(_ ack: CocoaMQTTConnAck) {
+        guard ack == .accept else {
+            lastError = Self.ackError(ack)
+            connectTimeoutTask?.cancel()
+            connectTimeoutTask = nil
+            failOverAfterConnectFailure()
+            return
+        }
+        handleConnect()
+    }
+
+    private static func ackError(_ ack: CocoaMQTTConnAck) -> String {
+        switch ack {
+        case .badUsernameOrPassword, .notAuthorized:
+            return "MQTT login failed — save user/pass in Settings, or leave both blank on this LAN"
+        case .serverUnavailable:
+            return "MQTT broker unavailable"
+        case .identifierRejected:
+            return "MQTT client id rejected"
+        default:
+            return "MQTT connect refused (\(ack))"
+        }
+    }
+    #endif
 
     fileprivate func handleConnect() {
         connectTimeoutTask?.cancel()
@@ -203,10 +302,15 @@ final class MQTTClient: ObservableObject {
         mqtt.subscribe("armband/ppg", qos: .qos0)
         // QoS 1 on batch ACK: dump settlement must survive brief reconnects.
         mqtt.subscribe("armband/ios/batch/ack", qos: .qos1)
+        mqtt.autoReconnect = true
         #endif
     }
 
     fileprivate func handleDisconnect(error: Error?) {
+        if failoverEnabled, isConnecting, !isConnected {
+            failOverAfterConnectFailure()
+            return
+        }
         isConnected = false
         isConnecting = false
 
@@ -229,7 +333,7 @@ private final class MQTTDelegateProxy: CocoaMQTTDelegate {
 
     func mqtt(_ mqtt: CocoaMQTT, didConnectAck ack: CocoaMQTTConnAck) {
         let owner = self.owner
-        Task { @MainActor in owner?.handleConnect() }
+        Task { @MainActor in owner?.handleConnectAck(ack) }
     }
 
     func mqtt(_ mqtt: CocoaMQTT, didReceiveMessage message: CocoaMQTTMessage, id: UInt16) {

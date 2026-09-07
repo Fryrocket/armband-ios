@@ -52,10 +52,18 @@ struct ArmbandIOSApp: App {
                             store?.add(reading)
                         }
                     }
+                    LocalNetworkGate.shared.nudge()
+                    _ = NetworkPath.shared
                     bluetooth.start()
                     mqtt.connect()
                 }
                 .onChange(of: scenePhase) { _, phase in
+                    if phase == .active {
+                        LocalNetworkGate.shared.nudge()
+                        if !mqtt.isConnected {
+                            mqtt.connect()
+                        }
+                    }
                     if phase == .background || phase == .inactive {
                         store.flush()
                     }

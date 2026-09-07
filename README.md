@@ -66,15 +66,20 @@ armband-ios/
 - [Sources/Assets.xcassets/Contents.json](Sources/Assets.xcassets/Contents.json)
 - [Sources/Assets.xcassets/ForestBackground.imageset/Contents.json](Sources/Assets.xcassets/ForestBackground.imageset/Contents.json)
 - [Sources/Assets.xcassets/ForestBackground.imageset/ForestBackground.jpg](Sources/Assets.xcassets/ForestBackground.imageset/ForestBackground.jpg)
-- [Sources/Models/GlucoseRef.swift](Sources/Models/GlucoseRef.swift)
+- [Sources/Models/BatteryEstimate.swift](Sources/Models/BatteryEstimate.swift) — LiPo % and time-left from batt volts (display-only)
+- [Sources/Models/GlucoseFrom940.swift](Sources/Models/GlucoseFrom940.swift) — 940 nm → glucose hook (uncalibrated until model lands)
+- [Sources/Models/GlucoseRef.swift](Sources/Models/GlucoseRef.swift) — Libre / finger-poke reference glucose
 - [Sources/Models/NextReadingCountdown.swift](Sources/Models/NextReadingCountdown.swift)
 - [Sources/Models/Reading.swift](Sources/Models/Reading.swift) — data model + firmware JSON parser
 - [Sources/Models/SubjectID.swift](Sources/Models/SubjectID.swift)
 - [Sources/Networking/ArmbandBLE.swift](Sources/Networking/ArmbandBLE.swift)
 - [Sources/Networking/BluetoothManager.swift](Sources/Networking/BluetoothManager.swift)
+- [Sources/Networking/LocalNetworkGate.swift](Sources/Networking/LocalNetworkGate.swift) — Bonjour browse to trigger iOS Local Network prompt
 - [Sources/Networking/MQTTClient.swift](Sources/Networking/MQTTClient.swift) — CocoaMQTT wrapper, delegate proxy
+- [Sources/Networking/NetworkPath.swift](Sources/Networking/NetworkPath.swift) — Wi-Fi vs cellular path for MQTT failover
 - [Sources/Store/DeviceIdentity.swift](Sources/Store/DeviceIdentity.swift) — stable per-install device id
 - [Sources/Store/KeychainStore.swift](Sources/Store/KeychainStore.swift)
+- [Sources/Store/MQTTAuth.swift](Sources/Store/MQTTAuth.swift) — MQTT wire credentials; partial Keychain becomes anonymous
 - [Sources/Store/MQTTCredentials.swift](Sources/Store/MQTTCredentials.swift)
 - [Sources/Store/MQTTHost.swift](Sources/Store/MQTTHost.swift)
 - [Sources/Store/ReadingStore.swift](Sources/Store/ReadingStore.swift) — offline store, debounced saves, pending queue
@@ -109,13 +114,17 @@ armband-ios/
 **Other**
 - [ArmbandIOS.xcodeproj/project.pbxproj](ArmbandIOS.xcodeproj/project.pbxproj)
 - [ArmbandIOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved](ArmbandIOS.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved)
+- [ArmbandIOS.xcodeproj/project.xcworkspace/xcuserdata/fryrocket.xcuserdatad/UserInterfaceState.xcuserstate](ArmbandIOS.xcodeproj/project.xcworkspace/xcuserdata/fryrocket.xcuserdatad/UserInterfaceState.xcuserstate)
 - [ArmbandIOS.xcodeproj/xcshareddata/xcschemes/ArmbandIOS.xcscheme](ArmbandIOS.xcodeproj/xcshareddata/xcschemes/ArmbandIOS.xcscheme)
 - [ArmbandIOS/ArmbandIOS.entitlements](ArmbandIOS/ArmbandIOS.entitlements)
 - [ArmbandIOS/Info.plist](ArmbandIOS/Info.plist)
 - [Package.resolved](Package.resolved)
 - [Package.swift](Package.swift)
+- [Tests/BatteryEstimateTests.swift](Tests/BatteryEstimateTests.swift)
+- [Tests/GlucoseFrom940Tests.swift](Tests/GlucoseFrom940Tests.swift)
 - [Tests/GlucoseRefTests.swift](Tests/GlucoseRefTests.swift)
 - [Tests/KeychainStoreTests.swift](Tests/KeychainStoreTests.swift)
+- [Tests/MQTTAuthTests.swift](Tests/MQTTAuthTests.swift)
 - [Tests/MQTTCredentialsTests.swift](Tests/MQTTCredentialsTests.swift)
 - [Tests/MQTTHostTests.swift](Tests/MQTTHostTests.swift)
 - [Tests/NextReadingCountdownTests.swift](Tests/NextReadingCountdownTests.swift)

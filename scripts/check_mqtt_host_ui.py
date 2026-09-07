@@ -36,7 +36,7 @@ def main() -> int:
     need = (
         "enum MQTTHost",
         'defaultsKey = "mqtt_host"',
-        'fallback = "192.168.1.100"',
+        'fallback = "192.168.4.27"',
         "UserDefaults",
     )
     missing = [s for s in need if s not in host]
@@ -51,6 +51,8 @@ def main() -> int:
         failures += fail("settings ui", "no Broker host field")
     elif "MQTTHost.save" not in settings or "MQTTHost.load" not in settings:
         failures += fail("settings ui", "does not call MQTTHost.save/load")
+    elif "Save cellular host" not in settings:
+        failures += fail("settings ui", "no Save cellular host button")
     elif "Save host" not in settings:
         failures += fail("settings ui", "no Save host button")
     else:

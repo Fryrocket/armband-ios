@@ -36,8 +36,10 @@ struct SettingsView: View {
     @State private var mqttUser = ""
     @State private var mqttPass = ""
     @State private var mqttHost = ""
+    @State private var mqttWanHost = ""
     @State private var credStatus: String?
     @State private var hostStatus: String?
+    @State private var wanStatus: String?
 
     var body: some View {
         NavigationStack {
@@ -110,7 +112,23 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    Text("Host is not a secret. Stored in the app plist (`mqtt_host`).")
+                    Text("House LAN: 192.168.4.27 (IRIS). Used on this Wi-Fi.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    TextField("Cellular / off-LAN host", text: $mqttWanHost)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                    Button("Save cellular host") {
+                        saveMQTTWanHost()
+                    }
+                    if let wanStatus {
+                        Text(wanStatus)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("Off-LAN dump uses this host on port 41883. Needs MQTT user/pass below. Host is not a secret.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -128,7 +146,7 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    Text("Stored in Keychain only. Never the app plist.")
+                    Text("Stored in Keychain only. LAN dump can be blank. Cellular dump requires user/pass.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -155,13 +173,13 @@ struct SettingsView: View {
                             syncEngine.cancelDump()
                         }
                     } else {
-                        Button("Dump to Pi now") {
+                        Button("Dump to IRIS now") {
                             syncEngine.startDump()
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(Color.fireEngineRed)
                         .foregroundStyle(.white)
-                        .disabled(store.pendingCount == 0)
+                        .disabled(store.pendingCount + store.pendingGlucoseCount == 0)
                     }
                 }
                 
@@ -185,6 +203,7 @@ struct SettingsView: View {
                 mqttUser = loaded.username
                 mqttPass = loaded.password
                 mqttHost = MQTTHost.load()
+                mqttWanHost = MQTTHost.loadWan()
             }
         }
     }
@@ -214,5 +233,14 @@ struct SettingsView: View {
             password: mqtt.password
         )
         hostStatus = "Host saved: \(stored)"
+    }
+
+    private func saveMQTTWanHost() {
+        let stored = MQTTHost.saveWan(mqttWanHost)
+        mqttWanHost = stored
+        wanStatus = "Cellular host saved: \(stored):41883"
+        if !mqtt.isConnected {
+            mqtt.connect()
+        }
     }
 }

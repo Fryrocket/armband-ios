@@ -15,9 +15,15 @@ import UIKit
 @MainActor
 final class ReadingStore: ObservableObject {
     @Published private(set) var readings: [Reading] = []
+    /// Last BLE/MQTT packet for Live tiles. Not every packet is dumped to the Pi.
+    @Published private(set) var latestLive: Reading?
+    /// Last ~60 live packets for charts. In-memory only.
+    @Published private(set) var liveRecent: [Reading] = []
     @Published private(set) var glucoseRefs: [GlucoseRef] = []
     @Published private(set) var pendingCount: Int = 0
     @Published private(set) var pendingGlucoseCount: Int = 0
+    /// Start of the current 3-min sample window. Not every BLE packet.
+    @Published private(set) var nextReadingAnchor: Date?
     @Published var currentSessionId: UUID?
     /// Closed Subject_ID from Settings. Nil until the operator picks one.
     /// Persisted in UserDefaults (`SubjectID.defaultsKey`). Re-seat does not
@@ -29,6 +35,7 @@ final class ReadingStore: ObservableObject {
     }
     
     private let maxReadings = 5_000
+    private let liveRecentCap = 60
     private let fileURL: URL
     private let glucoseFileURL: URL
     private var saveTask: Task<Void, Never>?
@@ -56,10 +63,24 @@ final class ReadingStore: ObservableObject {
         if r.subjectId == nil {
             r.subjectId = currentSubjectId
         }
+        latestLive = r
+        liveRecent.append(r)
+        if liveRecent.count > liveRecentCap {
+            liveRecent.removeFirst(liveRecent.count - liveRecentCap)
+        }
+        // Bench BLE notifies ~1.5s. Pi dump is the 3-min sample, not every packet.
+        guard NextReadingCountdown.shouldEnqueueDump(
+            lastDumpAt: readings.last?.timestamp,
+            incoming: r.timestamp
+        ) else { return }
         readings.append(r)
         if !r.synced {
             pendingCount += 1
         }
+        nextReadingAnchor = NextReadingCountdown.cadenceAnchor(
+            previous: nextReadingAnchor,
+            incoming: r.timestamp
+        )
         enforceCap()
         scheduleSave()
     }
@@ -94,7 +115,7 @@ final class ReadingStore: ObservableObject {
                 newly += 1
             }
         }
-        pendingGlucoseCount = max(0, pendingGlucoseCount - newly)
+        pendingGlucoseCount = glucoseRefs.reduce(0) { $0 + ($1.synced ? 0 : 1) }
         saveGlucoseNow()
     }
 
@@ -121,7 +142,7 @@ final class ReadingStore: ObservableObject {
                 newly += 1
             }
         }
-        pendingCount = max(0, pendingCount - newly)
+        pendingCount = readings.reduce(0) { $0 + ($1.synced ? 0 : 1) }
         enforceCap()
         scheduleSave()
     }
@@ -172,6 +193,14 @@ final class ReadingStore: ObservableObject {
         pendingCount = readings.reduce(0) { $0 + ($1.synced ? 0 : 1) }
     }
     
+    private func rebuildCadenceAnchor() {
+        var anchor: Date?
+        for r in readings {
+            anchor = NextReadingCountdown.cadenceAnchor(previous: anchor, incoming: r.timestamp)
+        }
+        nextReadingAnchor = anchor
+    }
+
     private func scheduleSave() {
         saveTask?.cancel()
         saveTask = Task {
@@ -204,6 +233,7 @@ final class ReadingStore: ObservableObject {
             readings = try JSONDecoder().decode([Reading].self, from: data)
             pendingCount = readings.reduce(0) { $0 + ($1.synced ? 0 : 1) }
             enforceCap()
+            rebuildCadenceAnchor()
         } catch {
             print("ReadingStore load error: \(error)")
         }

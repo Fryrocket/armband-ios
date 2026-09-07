@@ -12,14 +12,14 @@ extension Color {
 struct ForestBackdrop: View {
     var body: some View {
         ZStack(alignment: .bottom) {
-            Color.forestGreen
+            Color.black
             Image("ForestBackground")
                 .resizable()
                 .scaledToFill()
-                .opacity(0.55)
-            Color.forestGreen.opacity(0.45)
+                .opacity(0.7)
+            Color.black.opacity(0.35)
             PineSilhouette()
-                .fill(Color.black.opacity(0.35))
+                .fill(Color.black.opacity(0.55))
                 .frame(height: 220)
                 .allowsHitTesting(false)
         }
@@ -62,9 +62,9 @@ extension View {
         self
             .scrollContentBackground(.hidden)
             .background { ForestBackdrop() }
-            .toolbarBackground(Color.forestGreen.opacity(0.92), for: .navigationBar)
+            .toolbarBackground(Color.black.opacity(0.92), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarBackground(Color.forestGreen.opacity(0.92), for: .tabBar)
+            .toolbarBackground(Color.black.opacity(0.92), for: .tabBar)
             .toolbarBackground(.visible, for: .tabBar)
             .toolbarColorScheme(.dark, for: .navigationBar, .tabBar)
         #else

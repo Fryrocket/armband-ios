@@ -32,6 +32,11 @@ struct Reading: Identifiable, Codable, Equatable {
     var temperatureFahrenheit: Double? {
         temperature.map { $0 * 9.0 / 5.0 + 32.0 }
     }
+
+    /// Display-only 940 → glucose. Nil until `GlucoseFrom940.estimate` is calibrated.
+    var estimatedGlucoseMgdl: Double? {
+        GlucoseFrom940.mgdl(filt940: filt940)
+    }
     
     init(
         id: UUID = UUID(),
